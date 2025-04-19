@@ -127,7 +127,11 @@ struct Pixel
     Pixel ( char a ) : Char(a) {};
     Pixel () = default;
 };
-
+double wrapToPi(double angle) {
+    angle = std::fmod(angle + M_PI, 2 * M_PI);
+    if (angle < 0) angle += 2 * M_PI;
+    return angle - M_PI;
+}
 #define NUM_OF_POINTS 2124
 class Context
 {
@@ -198,7 +202,7 @@ class Context
     point2 Project(const point3& obj)
     {
         point3 diff = obj - Cam.Position;
-        return { 2*tan((diff.Theta() - Cam.Direction.Theta)/2), 2*tan((diff.Phi() - Cam.Direction.Phi)/2) };
+        return { wrapToPi(diff.Theta() - Cam.Direction.Theta), ((diff.Phi() - Cam.Direction.Phi)) };
     }
     void Cast()
     {
@@ -208,7 +212,7 @@ class Context
         int cols = Pixels[0].size();
         for (int i = 0; i<Pixels.size(); i++){
             for (int j = 0; j<Pixels[0].size(); j++){
-            point3 d = ( Cam.Direction + direction3( atan( (( (double)j / cols) - 0.5)/2 )*2 *2.06, atan( - (( (double)i / rows) - 0.5 )/2 )*2 ) ).UnitVector();
+            point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
             //point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5) *2.06, - (( (double)i / rows) - 0.5 ) ) ).UnitVector();
             //si risolve per tutti i piani/triangoli
             double min_t = 0.0/0;
