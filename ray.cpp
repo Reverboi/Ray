@@ -77,6 +77,7 @@ struct direction3
     point3 UnitVector() const { return { X(), Y(), Z() }; }
     direction3(const direction3&) = default;
     direction3(direction3&&) = default;
+    direction3() = default;
     direction3& operator=(const direction3&) = default;
     direction3& operator=(direction3&&) = default;
 
@@ -121,9 +122,11 @@ class Camera
 {
     public:
 	point3 Position;
+    point3 Velocity;
 	direction3 Direction;
+    direction3 DirectionDelta;
 
-    Camera( point3 p, direction3 d ) : Position( p ), Direction( d ) {};
+    Camera( point3 p, direction3 d ) : Position( p ), Direction( d ), Velocity(), DirectionDelta() {};
 };
 
 struct Pixel
@@ -140,6 +143,9 @@ double wrapToPi(double angle) {
     return angle - M_PI;
 }
 
+constexpr int FPS = 28; // do these two really need to be consdtexpr? what if i want  to be able to change fps mid-game for any reasson
+constexpr std::chrono::milliseconds MS_PER_FRAME(1000 / FPS); // if you keep them contexpr and bring them inside Context you'll need static as well
+
 class Context
 {
     public:
@@ -147,10 +153,14 @@ class Context
     double q = -0.3;
     double p = 0.0;
     double PixelRatio = 2.06; //2.06
+    bool jumping = false;
+    bool debug = true;
+    double step = 0.6;
+    double g=0, vz=0;
+    int frameDuration; // milliseconds
     int NumberOfThings;
     std::vector<triangle3> Things;
     std::vector<point3> ThingsP;
-    std::vector<point2> ImagesP;
 
     std::vector<std::vector<struct Pixel>> Pixels;
     Context( int x, int y ) :
@@ -194,15 +204,6 @@ class Context
             ThingsP.push_back({10, 0, 10});
         }
     }
-    void ProjectAll()
-    {
-        ImagesP.clear();
-        for( int i=0; i<ThingsP.size(); i++ )
-        {   
-            ImagesP.push_back(Project(ThingsP[i]));
-        }
-    }
-    triangle2 Project(const triangle3& obj) { return { Project(obj.a), Project(obj.b), Project(obj.c) }; }
     point2 Project(const point3& obj)
     {
         point3 diff = obj - Cam.Position;
@@ -266,10 +267,11 @@ class Context
                 }
             }
         }
-        for(int i= 0; i<ImagesP.size(); i++){
+        for(int i= 0; i<ThingsP.size(); i++){
             double distance = (ThingsP[i] - Cam.Position).Length();
-            int yy = (int)round(((ImagesP[i].X / PixelRatio )+0.5)*cols);
-            int xx = (int)round(((-ImagesP[i].Y)+0.5)*rows);
+            point2 projection = Project(ThingsP[i]);
+            int yy = (int)round(((projection.X / PixelRatio )+0.5)*cols);
+            int xx = (int)round(((-projection.Y)+0.5)*rows);
             if((xx>=0)&&(yy>=0)&&(xx<rows)&&(yy<cols)){
             if ((distance>0)&&((Pixels[xx][yy].Distance>distance)||(Pixels[xx][yy].Distance!=Pixels[xx][yy].Distance))){
                 Pixels[xx][yy].Distance = distance;
@@ -277,5 +279,40 @@ class Context
                 Pixels[xx][yy].Colour = 7;
             }}
         }
+    }
+    void render(){
+        clear();
+        Cast();
+        const int rows = Pixels.size();
+        const int cols = Pixels[0].size();
+        for (int y = 0; y < rows; ++y){
+            for (int x = 0; x < cols; ++x){   
+                attron(COLOR_PAIR(Pixels[y][x].Colour));
+                mvaddch( y, x, Pixels[y][x].Char ) ;
+                attroff(COLOR_PAIR(Pixels[y][x].Colour));
+            }
+        }
+            
+        int s=0;
+        if(debug){
+            point3 diff = point3(10,0,10) - Cam.Position;
+            point3 up = Cam.Direction.UnitVector().RotatePhi90Up();
+            point3 right = Cam.Direction.UnitVector().RotateTheta90YX();
+            point3 pro = up.OddPart(diff);
+            point3 bro = right.OddPart(diff);
+            mvprintw(s++, 0, "theta---: %.2f phi---: %.2f", Cam.Direction.Theta, Cam.Direction.Phi);
+            mvprintw(s++, 0, "thetapro: %.2f phipro: %.2f", pro.Theta(), pro.Phi());
+            mvprintw(s++, 0, "thetabro: %.2f phibro: %.2f", bro.Theta(), bro.Phi());
+            mvprintw(s++, 0, "diff-len: %.2f diff-norm-len: %.2f", diff.Length(), diff.Normalize().Length());
+            mvprintw(s++, 0, "thetadif: %.2f phidif: %.2f", atan2(up * Cam.Direction.UnitVector().CrossProduct(pro.Normalize()), Cam.Direction.UnitVector()*pro.Normalize()),
+            atan2(right * Cam.Direction.UnitVector().CrossProduct(bro.Normalize()), Cam.Direction.UnitVector()*bro.Normalize() ));
+            mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", Cam.Position.X, Cam.Position.Y, Cam.Position.Z);
+            mvprintw(s++, 0, "q = %.2f", q);
+            mvprintw(s++, 0, "p = %.2f", p);
+            mvprintw(s++, 0, "cols = %d, rows = %d, c/r = %.2f", cols, rows, (float)cols/rows);
+            mvprintw(s++, 0, "frame time = %d teomaxFPS = %.2f", frameDuration, 1000.0/frameDuration);
+            mvprintw(s++, 0, "looop time = %ld fixed FPS = %.2f", MS_PER_FRAME.count(), 1000.0/MS_PER_FRAME.count());
+        }
+        refresh();  // Aggiorna lo schermo
     }
 };

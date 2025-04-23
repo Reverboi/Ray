@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
-#include <chrono>
+//#include <chrono>
 #include "ray.cpp"
 
 struct KeyInfo {
@@ -151,9 +151,6 @@ void monitorDevices() {
     udev_unref(udev);
 }
 
-constexpr int FPS = 28;
-constexpr std::chrono::milliseconds MS_PER_FRAME(1000 / FPS);
-
 void displayLoop() {
     // Inizializzazione di curses
     initscr();             // Inizializza il terminale in modalità curses
@@ -174,11 +171,6 @@ void displayLoop() {
     getmaxyx(stdscr, rows, cols);
     Context Con(cols, rows);
     refresh(); // Aggiorna lo schermo per visualizzare il testo
-	bool jumping = false;
-    bool debug = true;
-    double qx=1.0;
-    double step = 0.6;
-    double g=0, vz=0;
     auto frameStart = std::chrono::high_resolution_clock::now();
     auto frameEnd = std::chrono::high_resolution_clock::now();
     auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
@@ -207,35 +199,35 @@ void displayLoop() {
                 Con.Cam.Direction.Theta += 0.15;
             }
             if (key_states[30].is){
-                Con.Cam.Position.Y -= step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.X += step * sin(Con.Cam.Direction.Theta);
+                Con.Cam.Position.Y -= Con.step * cos(Con.Cam.Direction.Theta);
+                Con.Cam.Position.X += Con.step * sin(Con.Cam.Direction.Theta);
             }
             if (key_states[32].is){
-                Con.Cam.Position.Y += step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.X -= step * sin(Con.Cam.Direction.Theta);
+                Con.Cam.Position.Y += Con.step * cos(Con.Cam.Direction.Theta);
+                Con.Cam.Position.X -= Con.step * sin(Con.Cam.Direction.Theta);
             }
             if (key_states[17].is){
-                Con.Cam.Position.X += step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.Y += step * sin(Con.Cam.Direction.Theta);
+                Con.Cam.Position.X += Con.step * cos(Con.Cam.Direction.Theta);
+                Con.Cam.Position.Y += Con.step * sin(Con.Cam.Direction.Theta);
             }
             if (key_states[31].is){
-                Con.Cam.Position.X -= step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.Y -= step * sin(Con.Cam.Direction.Theta);
+                Con.Cam.Position.X -= Con.step * cos(Con.Cam.Direction.Theta);
+                Con.Cam.Position.Y -= Con.step * sin(Con.Cam.Direction.Theta);
             }
             if (key_states[57].is){
-                if (!jumping){
-                    vz = 0.6;
-                    g = -0.03;
-                    jumping = true;
+                if (!Con.jumping){
+                    Con.vz = 0.6;
+                    Con.g = -0.03;
+                    Con.jumping = true;
                 }
             }
-            Con.Cam.Position.Z += vz;
-            vz +=g;
+            Con.Cam.Position.Z += Con.vz;
+            Con.vz +=Con.g;
             if(Con.Cam.Position.Z<7){
                 Con.Cam.Position.Z = 7;
-                vz = 0;
-                g = 0;
-                jumping = false;
+                Con.vz = 0;
+                Con.g = 0;
+                Con.jumping = false;
             }
             if (key_states[52].is){
                 Con.p-=0.02;
@@ -244,49 +236,15 @@ void displayLoop() {
                 Con.p+=0.02;
             }
             if (key_states[23].is){
-                debug = !debug;
+                Con.debug = !Con.debug;
             }
         }
-        clear();
-        Con.ProjectAll();
-        Con.Cast();
-        for (int y = 0; y < rows; ++y)
-        {
-            for (int x = 0; x < cols; ++x)
-            {   
-                attron(COLOR_PAIR(Con.Pixels[y][x].Colour));
-                mvaddch( y, x, Con.Pixels[y][x].Char ) ;
-                attroff(COLOR_PAIR(Con.Pixels[y][x].Colour));
-            }
-        }
-        
-        int s=0;
-        if(debug){
-            point3 diff = point3(10,0,10) - Con.Cam.Position;
-        
-            point3 up = Con.Cam.Direction.UnitVector().RotatePhi90Up();
-            point3 right = Con.Cam.Direction.UnitVector().RotateTheta90YX();
-            point3 pro = up.OddPart(diff);
-            point3 bro = right.OddPart(diff);
-        mvprintw(s++, 0, "theta---: %.2f phi---: %.2f", Con.Cam.Direction.Theta, Con.Cam.Direction.Phi);
-        mvprintw(s++, 0, "thetapro: %.2f phipro: %.2f", pro.Theta(), pro.Phi());
-        mvprintw(s++, 0, "thetabro: %.2f phibro: %.2f", bro.Theta(), bro.Phi());
-        mvprintw(s++, 0, "diff-len: %.2f diff-norm-len: %.2f", diff.Length(), diff.Normalize().Length());
-        mvprintw(s++, 0, "thetadif: %.2f phidif: %.2f", atan2(up * Con.Cam.Direction.UnitVector().CrossProduct(pro.Normalize()), Con.Cam.Direction.UnitVector()*pro.Normalize()),
-        atan2(right * Con.Cam.Direction.UnitVector().CrossProduct(bro.Normalize()), Con.Cam.Direction.UnitVector()*bro.Normalize() ));
-        mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", Con.Cam.Position.X, Con.Cam.Position.Y, Con.Cam.Position.Z);
-        mvprintw(s++, 0, "q = %.2f", Con.q);
-        mvprintw(s++, 0, "p = %.2f", Con.p);
-        mvprintw(s++, 0, "cols = %d, rows = %d, c/r = %.2f", cols, rows, (float)cols/rows);
-        mvprintw(s++, 0, "frame time = %ld teomaxFPS = %.2f", frameDuration.count(), 1000.0/frameDuration.count());
-        mvprintw(s++, 0, "looop time = %ld fixed FPS = %.2f", MS_PER_FRAME.count(), 1000.0/MS_PER_FRAME.count());
-        }
-        refresh();  // Aggiorna lo schermo
+        Con.render();
         lock.unlock();
         //key_mutex.unlock();
         frameEnd = std::chrono::high_resolution_clock::now();
         frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
-
+        Con.frameDuration = frameDuration.count();
         if (frameDuration < MS_PER_FRAME) {
             std::this_thread::sleep_for(MS_PER_FRAME - frameDuration);
         }
