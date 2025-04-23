@@ -14,7 +14,7 @@ struct point3
     point3(double a = 0, double b = 0, double c = 0) : X(a), Y(b), Z(c) {}
 
     point3 operator*(const double l) const { return {l * X, l * Y, l * Z}; }
-    point3 operator/(const double l) const { return {l / X, l / Y, l / Z}; }
+    point3 operator/(const double l) const { return {X / l, Y / l, Z / l}; }
 
     point3(const direction3& d, const double len = 1);
 
@@ -23,7 +23,7 @@ struct point3
     double Length() const { return std::sqrt(*this * *this); }
 
     double Theta() const { return std::atan2( Y, X ); } // Angle on the X-Y plane.
-    double Phi() const { return std::atan2( Z, std::sqrt( X * X + Y * Y ) ); } // Angle from Z-axis.
+    double Phi() const { return std::atan2( Z, std::sqrt( X * X + Y * Y ) ); } // Angle from the X-Y plane.
 
     direction3 Direction() const;
 
@@ -31,10 +31,25 @@ struct point3
     point3(point3&&) = default;
     point3& operator=(const point3&) = default;
     point3& operator=(point3&&) = default;
-
+    point3 Normalize() const {return *this/Length();}
     point3 operator+(const point3& other) const { return { X + other.X, Y + other.Y, Z + other.Z }; }
     point3 operator-(const point3& other) const { return { X - other.X, Y - other.Y, Z - other.Z }; }
+    point3 EvenPart(const point3& other) const { return (*this)*(*this * other)/(*this * *this);}
+    point3 OddPart(const point3& other) const { return other - EvenPart(other);}
     point3 CrossProduct(const point3& other) const { return { Y * other.Z - Z * other.Y, Z * other.X - X * other.Z, X * other.Y - Y * other.X }; }
+    double AngleFrom(const point3& other) const {  // bad
+        point3 a = Normalize();
+        point3 b = other.Normalize();
+        return atan2(a.CrossProduct(b).Length(),a*b);
+    }
+    point3 Rotate(const point3& o, double t) const {
+        point3 d = Normalize();
+        return {
+            (cos(t)+d.X*d.X*(1-cos(t)))*o.X + (d.X*d.Y*(1-cos(t))-d.Z*sin(t))*o.Y + (d.X*d.Z*(1-cos(t))+d.Y*sin(t))*o.Z,
+            (d.Y*d.X*(1-cos(t))+d.Z*sin(t))*o.X + (cos(t)+d.Y*d.Y*(1-cos(t)))*o.Y + (d.Y*d.Z*(1-cos(t))-d.X*sin(t))*o.Z,
+            (d.Z*d.X*(1-cos(t))-d.Y*sin(t))*o.X + (d.Z*d.Y*(1-cos(t))+d.X*sin(t))*o.Y + (cos(t)+d.Z*d.Z*(1-cos(t)))*o.Z
+        };
+    }
     point3 RotatePhi90Up()
     {
         return
@@ -44,7 +59,7 @@ struct point3
             sqrt( X * X + Y * Y )
         };
     }
-    point3 RotateTheta90YX() { return { Y, -X, Z }; }
+    point3 RotateTheta90YX() { return RotatePhi90Up().CrossProduct(*this);} // does not preserve module if!=1
 };
 
 struct direction3 
@@ -60,7 +75,6 @@ struct direction3
     double Z() const { return std::sin(Phi); }
 
     point3 UnitVector() const { return { X(), Y(), Z() }; }
-    direction3 Saggitario() const { return { Theta - M_PI_2, 0 }; }
     direction3(const direction3&) = default;
     direction3(direction3&&) = default;
     direction3& operator=(const direction3&) = default;
@@ -101,13 +115,6 @@ struct triangle2
 	triangle2( const point2& a, const point2& b, const point2& c ) : a( a ), b( b ), c( c ) {};
     triangle2() = default;
     double Area() const { return abs( ( a.X * ( b.Y - c.Y ) + b.X * ( c.Y - a.Y ) + c.X * ( a.Y - b.Y ) ) / 2.0 ); }
-    bool IsInside(const point2& p) const
-    {
-        double A1 = triangle2(p,b,c).Area();
-        double A2 = triangle2(a,p,c).Area();
-        double A3 = triangle2(a,b,p).Area();
-        return abs(Area() - (A1 + A2 + A3)) <= 0.000001;
-    }
 };
 
 class Camera
@@ -132,16 +139,17 @@ double wrapToPi(double angle) {
     if (angle < 0) angle += 2 * M_PI;
     return angle - M_PI;
 }
-#define NUM_OF_POINTS 2124
+
 class Context
 {
     public:
     Camera Cam;
-    double q = 1;
+    double q = -0.3;
+    double p = 0.0;
+    double PixelRatio = 2.06; //2.06
     int NumberOfThings;
     std::vector<triangle3> Things;
     std::vector<point3> ThingsP;
-    std::vector<triangle2> Images;
     std::vector<point2> ImagesP;
 
     std::vector<std::vector<struct Pixel>> Pixels;
@@ -174,12 +182,12 @@ class Context
             for (int _i=1; _i<=20; _i++)
             {
                 double i = (double)_i, j = (double)_j;
-                ThingsP.push_back({i,j,0});
+                ThingsP.push_back({i,j,0});    //  floor
                 ThingsP.push_back({-i,j,0});
                 ThingsP.push_back({i,-j,0});
                 ThingsP.push_back({-i,-j,0});
 
-                ThingsP.push_back({0,i,j});
+                ThingsP.push_back({0,i,j});  // wall
             }
             ThingsP.push_back({10, 5, 5});
             ThingsP.push_back({10, -5, 5});
@@ -188,12 +196,8 @@ class Context
     }
     void ProjectAll()
     {
-        for( int i=0; i<NumberOfThings; i++ )
-        {
-            Images.push_back(Project(Things[i]));
-        }
         ImagesP.clear();
-        for( int i=0; i<NUM_OF_POINTS; i++ )
+        for( int i=0; i<ThingsP.size(); i++ )
         {   
             ImagesP.push_back(Project(ThingsP[i]));
         }
@@ -202,7 +206,18 @@ class Context
     point2 Project(const point3& obj)
     {
         point3 diff = obj - Cam.Position;
-        return { wrapToPi(diff.Theta() - Cam.Direction.Theta), ((diff.Phi() - Cam.Direction.Phi)) };
+        
+        point3 up = Cam.Direction.UnitVector().RotatePhi90Up();
+        point3 right = Cam.Direction.UnitVector().RotateTheta90YX();
+        point3 pro = up.OddPart(diff);
+        point3 bro = right.OddPart(diff);
+        //return { wrapToPi(diff.Theta() - Cam.Direction.Theta)*cos(diff.Phi()), ((diff.Phi() - Cam.Direction.Phi)) };
+
+        return {
+            atan2(up * Cam.Direction.UnitVector().CrossProduct(pro.Normalize()), Cam.Direction.UnitVector()*pro.Normalize()),
+            atan2(right * bro.Normalize().CrossProduct(Cam.Direction.UnitVector()), Cam.Direction.UnitVector()*bro.Normalize() )
+        };
+
     }
     void Cast()
     {
@@ -212,7 +227,17 @@ class Context
         int cols = Pixels[0].size();
         for (int i = 0; i<Pixels.size(); i++){
             for (int j = 0; j<Pixels[0].size(); j++){
-            point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
+            //point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
+            point3 u = Cam.Direction.UnitVector().RotatePhi90Up();
+            point3 r = Cam.Direction.UnitVector().RotateTheta90YX();
+            point3 l = u.Rotate(r, ((( (double)j / cols) - 0.5)*PixelRatio));
+            point3 h = r.Rotate(u,(( (double)i / rows) - 0.5));
+            //d = u.CrossProduct(d).Rotate(d, (( (double)i / rows) - 0.5)*cos((( (double)j / cols) - 0.5)*PixelRatio)*(1-cos(( (double)i / rows) - 0.5)));
+            point3 d = l.CrossProduct(h).Normalize();
+            /*point3 d = Cam.Direction.UnitVector().RotatePhi90Up().Rotate(
+                Cam.Direction.UnitVector().RotateTheta90YX().Rotate(
+                        Cam.Direction.UnitVector(), 
+                        tan(( (double)i / rows) - 0.5) ), ((( (double)j / cols) - 0.5)*2.06));*/
             //point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5) *2.06, - (( (double)i / rows) - 0.5 ) ) ).UnitVector();
             //si risolve per tutti i piani/triangoli
             double min_t = 0.0/0;
@@ -241,9 +266,9 @@ class Context
                 }
             }
         }
-        for(int i= 0; i<NUM_OF_POINTS; i++){
+        for(int i= 0; i<ImagesP.size(); i++){
             double distance = (ThingsP[i] - Cam.Position).Length();
-            int yy = (int)round(((ImagesP[i].X / 2.06 )+0.5)*cols);
+            int yy = (int)round(((ImagesP[i].X / PixelRatio )+0.5)*cols);
             int xx = (int)round(((-ImagesP[i].Y)+0.5)*rows);
             if((xx>=0)&&(yy>=0)&&(xx<rows)&&(yy<cols)){
             if ((distance>0)&&((Pixels[xx][yy].Distance>distance)||(Pixels[xx][yy].Distance!=Pixels[xx][yy].Distance))){
@@ -252,13 +277,5 @@ class Context
                 Pixels[xx][yy].Colour = 7;
             }}
         }
-    }
-    char Hits(const point2& p) const
-    {
-        for( int i=0; i<NumberOfThings; i++ )
-        {
-            if (Images[i].IsInside(p)) return '#';
-        }
-        return ' ';
     }
 };

@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
+#include <chrono>
 #include "ray.cpp"
 
 struct KeyInfo {
@@ -150,6 +151,9 @@ void monitorDevices() {
     udev_unref(udev);
 }
 
+constexpr int FPS = 28;
+constexpr std::chrono::milliseconds MS_PER_FRAME(1000 / FPS);
+
 void displayLoop() {
     // Inizializzazione di curses
     initscr();             // Inizializza il terminale in modalità curses
@@ -171,16 +175,22 @@ void displayLoop() {
     Context Con(cols, rows);
     refresh(); // Aggiorna lo schermo per visualizzare il testo
 	bool jumping = false;
+    bool debug = true;
     double qx=1.0;
-    double step = 0.3;
+    double step = 0.6;
     double g=0, vz=0;
+    auto frameStart = std::chrono::high_resolution_clock::now();
+    auto frameEnd = std::chrono::high_resolution_clock::now();
+    auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
     while (running) {
+        frameStart = std::chrono::high_resolution_clock::now();
+
         getmaxyx(stdscr, rows, cols);
         if ((rows!=Con.Pixels.size())||(cols!=Con.Pixels[0].size())){
             Con.Pixels = std::vector<std::vector<Pixel>>( rows, std::vector<Pixel>( cols ) );
         }
-        usleep(3000);
-        std::lock_guard<std::mutex> lock(key_mutex);
+        std::unique_lock<std::mutex> lock(key_mutex);
+        //key_mutex.lock();
         if (!key_states.empty()) { 
             if (key_states[103].is){
                 if ( Con.Cam.Direction.Phi <= M_PI_2 )
@@ -227,6 +237,15 @@ void displayLoop() {
                 g = 0;
                 jumping = false;
             }
+            if (key_states[52].is){
+                Con.p-=0.02;
+            }
+            if (key_states[53].is){
+                Con.p+=0.02;
+            }
+            if (key_states[23].is){
+                debug = !debug;
+            }
         }
         clear();
         Con.ProjectAll();
@@ -242,16 +261,35 @@ void displayLoop() {
         }
         
         int s=0;
-        mvprintw(s++, 0, "theta: %.2f phi: %.2f", Con.Cam.Direction.Theta, Con.Cam.Direction.Phi);
+        if(debug){
+            point3 diff = point3(10,0,10) - Con.Cam.Position;
+        
+            point3 up = Con.Cam.Direction.UnitVector().RotatePhi90Up();
+            point3 right = Con.Cam.Direction.UnitVector().RotateTheta90YX();
+            point3 pro = up.OddPart(diff);
+            point3 bro = right.OddPart(diff);
+        mvprintw(s++, 0, "theta---: %.2f phi---: %.2f", Con.Cam.Direction.Theta, Con.Cam.Direction.Phi);
+        mvprintw(s++, 0, "thetapro: %.2f phipro: %.2f", pro.Theta(), pro.Phi());
+        mvprintw(s++, 0, "thetabro: %.2f phibro: %.2f", bro.Theta(), bro.Phi());
+        mvprintw(s++, 0, "diff-len: %.2f diff-norm-len: %.2f", diff.Length(), diff.Normalize().Length());
+        mvprintw(s++, 0, "thetadif: %.2f phidif: %.2f", atan2(up * Con.Cam.Direction.UnitVector().CrossProduct(pro.Normalize()), Con.Cam.Direction.UnitVector()*pro.Normalize()),
+        atan2(right * Con.Cam.Direction.UnitVector().CrossProduct(bro.Normalize()), Con.Cam.Direction.UnitVector()*bro.Normalize() ));
         mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", Con.Cam.Position.X, Con.Cam.Position.Y, Con.Cam.Position.Z);
-        mvprintw(s++, 0, "a = (%.2f, %.2f)", Con.Images[0].a.X, Con.Images[0].a.Y);
-        mvprintw(s++, 0, "b = (%.2f, %.2f)", Con.Images[0].b.X, Con.Images[0].b.Y);
-        mvprintw(s++, 0, "a = (%.2f, %.2f, %.2f)", Con.Things[0].a.X, Con.Things[0].a.Y, Con.Things[0].a.Z);
-        mvprintw(s++, 0, "b = (%.2f, %.2f, %.2f)", Con.Things[0].b.X, Con.Things[0].b.Y, Con.Things[0].b.Z);
         mvprintw(s++, 0, "q = %.2f", Con.q);
+        mvprintw(s++, 0, "p = %.2f", Con.p);
         mvprintw(s++, 0, "cols = %d, rows = %d, c/r = %.2f", cols, rows, (float)cols/rows);
-        mvprintw(s++, 0, "cols = %ld, rows = %ld", Con.Pixels[0].size(), Con.Pixels.size() );
+        mvprintw(s++, 0, "frame time = %ld teomaxFPS = %.2f", frameDuration.count(), 1000.0/frameDuration.count());
+        mvprintw(s++, 0, "looop time = %ld fixed FPS = %.2f", MS_PER_FRAME.count(), 1000.0/MS_PER_FRAME.count());
+        }
         refresh();  // Aggiorna lo schermo
+        lock.unlock();
+        //key_mutex.unlock();
+        frameEnd = std::chrono::high_resolution_clock::now();
+        frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
+
+        if (frameDuration < MS_PER_FRAME) {
+            std::this_thread::sleep_for(MS_PER_FRAME - frameDuration);
+        }
     }
     // Chiudi curses e ripristina il terminale
     endwin();

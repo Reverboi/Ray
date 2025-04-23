@@ -1,0 +1,13 @@
+implementare loop flessibile
+risolvere la hak dei tasti
+Aggiungere la possibilità di cambiare visualizzazione
+ottimizzare Project/cast
+sistemare/minimizzare ogni chiamata chiamata goniometrica
+refactoring delle definizioni
+modularizzazione dei file
+possibilità di renderizzare in una finestra sdl2 o opengl
+max render distance?
+shading, different charachters
+menu and text display
+collision
+double buffer
