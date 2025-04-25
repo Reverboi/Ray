@@ -1,159 +1,10 @@
-#include <libevdev/libevdev.h>
-#include <libudev.h>
-#include <ncurses.h>
 #include <thread>
-#include <mutex>
-#include <map>
-#include <string>
-#include <atomic>
-#include <csignal>
-#include <fcntl.h>
-#include <unistd.h>
-#include <iostream>
-//#include <chrono>
 #include "ray.cpp"
-
-struct KeyInfo {
-    std::string device_name;
-    std::string state;
-    bool is; //hack
-};
-
-std::map<int, KeyInfo> key_states;
-std::mutex key_mutex;
-std::atomic<bool> running(true);
-
-struct DeviceContext {
-    int fd;
-    libevdev* dev;
-    std::thread thread;
-    std::string devnode;
-    std::string name;
-};
-
-std::mutex device_mutex;
-std::map<std::string, DeviceContext> device_threads;
-
-void signalHandler(int signum) {
-    running = false;
-}
-
-void readDeviceEvents(const std::string& devnode, libevdev* dev, const std::string& name) {
-    struct input_event ev;
-    while (running) {
-        int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_BLOCKING, &ev);
-        if (rc == 0 && ev.type == EV_KEY) {
-            std::lock_guard<std::mutex> lock(key_mutex);
-            if (ev.value == 1 || ev.value == 2) {
-                key_states[ev.code] = {name, ev.value == 1 ? "Pressed" : "Held", true}; //hack
-            } else if (ev.value == 0) {
-                key_states.erase(ev.code);
-            }
-        } else if (rc < 0 && rc != -EAGAIN) {
-            break;
-        }
-    }
-}
-
-void addDevice(struct udev_device* dev) {
-    const char* devnode = udev_device_get_devnode(dev);
-    if (!devnode) return;
-
-    int fd = open(devnode, O_RDONLY | O_NONBLOCK);
-    if (fd < 0) return;
-
-    libevdev* evdev = nullptr;
-    if (libevdev_new_from_fd(fd, &evdev) < 0) {
-        close(fd);
-        return;
-    }
-
-    if (!libevdev_has_event_type(evdev, EV_KEY)) {
-        libevdev_free(evdev);
-        close(fd);
-        return;
-    }
-
-    std::string devnode_str(devnode);
-    std::string name = libevdev_get_name(evdev);
-
-    DeviceContext ctx;
-    ctx.fd = fd;
-    ctx.dev = evdev;
-    ctx.devnode = devnode_str;
-    ctx.name = name;
-    ctx.thread = std::thread(readDeviceEvents, devnode_str, evdev, name);
-
-    std::lock_guard<std::mutex> lock(device_mutex);
-    device_threads[devnode_str] = std::move(ctx);
-}
-
-void removeDevice(const std::string& devnode) {
-    std::lock_guard<std::mutex> lock(device_mutex);
-    auto it = device_threads.find(devnode);
-    if (it != device_threads.end()) {
-        close(it->second.fd);
-        if (it->second.thread.joinable())
-            it->second.thread.detach();
-        libevdev_free(it->second.dev);
-        device_threads.erase(it);
-    }
-}
-
-void monitorDevices() {
-    struct udev* udev = udev_new();
-    struct udev_monitor* mon = udev_monitor_new_from_netlink(udev, "udev");
-    udev_monitor_filter_add_match_subsystem_devtype(mon, "input", NULL);
-    udev_monitor_enable_receiving(mon);
-    int fd = udev_monitor_get_fd(mon);
-
-    struct udev_enumerate* enumerate = udev_enumerate_new(udev);
-    udev_enumerate_add_match_subsystem(enumerate, "input");
-    udev_enumerate_add_match_property(enumerate, "ID_INPUT_KEYBOARD", "1");
-    udev_enumerate_scan_devices(enumerate);
-    struct udev_list_entry* devices = udev_enumerate_get_list_entry(enumerate);
-    struct udev_list_entry* entry;
-
-    udev_list_entry_foreach(entry, devices) {
-        const char* path = udev_list_entry_get_name(entry);
-        struct udev_device* dev = udev_device_new_from_syspath(udev, path);
-        addDevice(dev);
-        udev_device_unref(dev);
-    }
-    udev_enumerate_unref(enumerate);
-
-    while (running) {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(fd, &fds);
-
-        struct timeval tv = {0, 500000};
-        if (select(fd+1, &fds, NULL, NULL, &tv) > 0) {
-            struct udev_device* dev = udev_monitor_receive_device(mon);
-            if (dev) {
-                std::string action = udev_device_get_action(dev);
-                std::string devnode = udev_device_get_devnode(dev) ? udev_device_get_devnode(dev) : "";
-
-                if (action == "add") {
-                    if (udev_device_get_property_value(dev, "ID_INPUT_KEYBOARD"))
-                        addDevice(dev);
-                } else if (action == "remove") {
-                    if (!devnode.empty())
-                        removeDevice(devnode);
-                }
-
-                udev_device_unref(dev);
-            }
-        }
-    }
-
-    udev_monitor_unref(mon);
-    udev_unref(udev);
-}
+#include "input_handler.cpp"
 
 void displayLoop() {
     // Inizializzazione di curses
-    initscr();             // Inizializza il terminale in modalità curses
+    initscr();     // Inizializza il terminale in modalità curses
     start_color(); // Enable color functionality
 
     // Initialize color pairs
@@ -169,7 +20,7 @@ void displayLoop() {
     // nodelay(stdscr, TRUE); makes getch() impatient
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
-    Context Con(cols, rows);
+    Scene SceneInstance(cols, rows);
     refresh(); // Aggiorna lo schermo per visualizzare il testo
     auto frameStart = std::chrono::high_resolution_clock::now();
     auto frameEnd = std::chrono::high_resolution_clock::now();
@@ -178,73 +29,70 @@ void displayLoop() {
         frameStart = std::chrono::high_resolution_clock::now();
 
         getmaxyx(stdscr, rows, cols);
-        if ((rows!=Con.Pixels.size())||(cols!=Con.Pixels[0].size())){
-            Con.Pixels = std::vector<std::vector<Pixel>>( rows, std::vector<Pixel>( cols ) );
+        if ((rows!=SceneInstance.Pixels.size())||(cols!=SceneInstance.Pixels[0].size())){
+            SceneInstance.Pixels = std::vector<std::vector<Pixel>>( rows, std::vector<Pixel>( cols ) );
         }
         std::unique_lock<std::mutex> lock(key_mutex);
-        //key_mutex.lock();
+        
         if (!key_states.empty()) { 
             if (key_states[103].is){
-                if ( Con.Cam.Direction.Phi <= M_PI_2 )
-                    Con.Cam.Direction.Phi += 0.1;
+                if ( SceneInstance.CameraInstance.Direction.Phi <= M_PI_2 )
+                    SceneInstance.CameraInstance.Direction.Phi += 0.1;
             }
             if (key_states[108].is){
-                if ( Con.Cam.Direction.Phi >= - M_PI_2 )
-                Con.Cam.Direction.Phi -= 0.1;
+                if ( SceneInstance.CameraInstance.Direction.Phi >= - M_PI_2 )
+                SceneInstance.CameraInstance.Direction.Phi -= 0.1;
             }
             if (key_states[105].is){
-                Con.Cam.Direction.Theta -= 0.15;
+                SceneInstance.CameraInstance.Direction.Theta -= 0.15;
             }
             if (key_states[106].is){
-                Con.Cam.Direction.Theta += 0.15;
+                SceneInstance.CameraInstance.Direction.Theta += 0.15;
             }
             if (key_states[30].is){
-                Con.Cam.Position.Y -= Con.step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.X += Con.step * sin(Con.Cam.Direction.Theta);
+                SceneInstance.CameraInstance.Position.Y -= SceneInstance.step * cos(SceneInstance.CameraInstance.Direction.Theta);
+                SceneInstance.CameraInstance.Position.X += SceneInstance.step * sin(SceneInstance.CameraInstance.Direction.Theta);
             }
             if (key_states[32].is){
-                Con.Cam.Position.Y += Con.step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.X -= Con.step * sin(Con.Cam.Direction.Theta);
+                SceneInstance.CameraInstance.Position.Y += SceneInstance.step * cos(SceneInstance.CameraInstance.Direction.Theta);
+                SceneInstance.CameraInstance.Position.X -= SceneInstance.step * sin(SceneInstance.CameraInstance.Direction.Theta);
             }
             if (key_states[17].is){
-                Con.Cam.Position.X += Con.step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.Y += Con.step * sin(Con.Cam.Direction.Theta);
+                SceneInstance.CameraInstance.Position.X += SceneInstance.step * cos(SceneInstance.CameraInstance.Direction.Theta);
+                SceneInstance.CameraInstance.Position.Y += SceneInstance.step * sin(SceneInstance.CameraInstance.Direction.Theta);
             }
             if (key_states[31].is){
-                Con.Cam.Position.X -= Con.step * cos(Con.Cam.Direction.Theta);
-                Con.Cam.Position.Y -= Con.step * sin(Con.Cam.Direction.Theta);
+                SceneInstance.CameraInstance.Position.X -= SceneInstance.step * cos(SceneInstance.CameraInstance.Direction.Theta);
+                SceneInstance.CameraInstance.Position.Y -= SceneInstance.step * sin(SceneInstance.CameraInstance.Direction.Theta);
             }
             if (key_states[57].is){
-                if (!Con.jumping){
-                    Con.vz = 0.6;
-                    Con.g = -0.03;
-                    Con.jumping = true;
+                if (!SceneInstance.jumping){
+                    SceneInstance.vz = 0.6;
+                    SceneInstance.g = -0.03;
+                    SceneInstance.jumping = true;
                 }
             }
-            Con.Cam.Position.Z += Con.vz;
-            Con.vz +=Con.g;
-            if(Con.Cam.Position.Z<7){
-                Con.Cam.Position.Z = 7;
-                Con.vz = 0;
-                Con.g = 0;
-                Con.jumping = false;
+            SceneInstance.CameraInstance.Position.Z += SceneInstance.vz;
+            SceneInstance.vz +=SceneInstance.g;
+            if(SceneInstance.CameraInstance.Position.Z<7){
+                SceneInstance.CameraInstance.Position.Z = 7;
+                SceneInstance.vz = 0;
+                SceneInstance.g = 0;
+                SceneInstance.jumping = false;
             }
             if (key_states[52].is){
-                Con.p-=0.02;
             }
             if (key_states[53].is){
-                Con.p+=0.02;
             }
             if (key_states[23].is){
-                Con.debug = !Con.debug;
+                SceneInstance.debug = !SceneInstance.debug;
             }
         }
-        Con.render();
+        SceneInstance.render();
         lock.unlock();
-        //key_mutex.unlock();
         frameEnd = std::chrono::high_resolution_clock::now();
         frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
-        Con.frameDuration = frameDuration.count();
+        SceneInstance.frameDuration = frameDuration.count();
         if (frameDuration < MS_PER_FRAME) {
             std::this_thread::sleep_for(MS_PER_FRAME - frameDuration);
         }

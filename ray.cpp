@@ -2,7 +2,7 @@
 #include <array>
 #include <vector>
 #include <cmath>
-//using std::cos, std::sin, std::atan2, std::sqrt, std::abs, std::round;
+#include <chrono>
 struct direction3; // Forward declaration for point3.
 
 struct point3 
@@ -144,79 +144,74 @@ double wrapToPi(double angle) {
 }
 
 constexpr int FPS = 28; // do these two really need to be consdtexpr? what if i want  to be able to change fps mid-game for any reasson
-constexpr std::chrono::milliseconds MS_PER_FRAME(1000 / FPS); // if you keep them contexpr and bring them inside Context you'll need static as well
+constexpr std::chrono::milliseconds MS_PER_FRAME(1000 / FPS); // if you keep them contexpr and bring them inside Scene you'll need static as well
 
-class Context
+class Scene
 {
     public:
-    Camera Cam;
-    double q = -0.3;
-    double p = 0.0;
+    Camera CameraInstance;
     double PixelRatio = 2.06; //2.06
     bool jumping = false;
     bool debug = true;
     double step = 0.6;
     double g=0, vz=0;
     int frameDuration; // milliseconds
-    int NumberOfThings;
-    std::vector<triangle3> Things;
-    std::vector<point3> ThingsP;
+    std::vector<triangle3> Triangles;
+    std::vector<point3> Points;
 
     std::vector<std::vector<struct Pixel>> Pixels;
-    Context( int x, int y ) :
+    Scene( int x, int y ) :
         Pixels( y, std::vector<Pixel>( x ) ),
-        Cam( {0, 0, 7}, {0, 0} ),
-        Things({{
+        CameraInstance( {0, 0, 7}, {0, 0} ),
+        Triangles({{
             {{ 10, 0, 10 }, { 10, 5, 5 }, { 10, -5, 5 }},
             {{ 8, -2, 0 }, { 4, -2, 0 }, { 6, 0, 6 }},
             {{ 8, +2, 0 }, { 4, +2, 0 }, { 6, 0, 6 }},
             {{ 8, -2, 0 }, { 8, +2, 0 }, { 6, 0, 6 }},
             {{ 4, -2, 0 }, { 4, +2, 0 }, { 6, 0, 6 }}
-            }}),
-        NumberOfThings(5)
-    {
-        int p=0;
-        ThingsP.push_back({0,0,0});
+            }})
+        {
+        Points.push_back({0,0,0});
         for (int _i=1; _i<=20; _i++)
         {
             double i = (double)_i;
-            ThingsP.push_back({0,0,i});
-            ThingsP.push_back({0,i,0});
-            ThingsP.push_back({i,0,0});
+            Points.push_back({0,0,i});
+            Points.push_back({0,i,0});
+            Points.push_back({i,0,0});
 
-            ThingsP.push_back({0,0,-i});
-            ThingsP.push_back({0,-i,0});
-            ThingsP.push_back({-i,0,0});
+            Points.push_back({0,0,-i});
+            Points.push_back({0,-i,0});
+            Points.push_back({-i,0,0});
         }
         for(int _j=1; _j<=20;_j++){
             for (int _i=1; _i<=20; _i++)
             {
                 double i = (double)_i, j = (double)_j;
-                ThingsP.push_back({i,j,0});    //  floor
-                ThingsP.push_back({-i,j,0});
-                ThingsP.push_back({i,-j,0});
-                ThingsP.push_back({-i,-j,0});
+                Points.push_back({i,j,0});    //  floor
+                Points.push_back({-i,j,0});
+                Points.push_back({i,-j,0});
+                Points.push_back({-i,-j,0});
 
-                ThingsP.push_back({0,i,j});  // wall
+                Points.push_back({0,i,j});  // wall
             }
-            ThingsP.push_back({10, 5, 5});
-            ThingsP.push_back({10, -5, 5});
-            ThingsP.push_back({10, 0, 10});
+            Points.push_back({10, 5, 5});
+            Points.push_back({10, -5, 5});
+            Points.push_back({10, 0, 10});
         }
     }
     point2 Project(const point3& obj)
     {
-        point3 diff = obj - Cam.Position;
+        point3 diff = obj - CameraInstance.Position;
         
-        point3 up = Cam.Direction.UnitVector().RotatePhi90Up();
-        point3 right = Cam.Direction.UnitVector().RotateTheta90YX();
+        point3 up = CameraInstance.Direction.UnitVector().RotatePhi90Up();
+        point3 right = CameraInstance.Direction.UnitVector().RotateTheta90YX();
         point3 pro = up.OddPart(diff);
         point3 bro = right.OddPart(diff);
-        //return { wrapToPi(diff.Theta() - Cam.Direction.Theta)*cos(diff.Phi()), ((diff.Phi() - Cam.Direction.Phi)) };
+        //return { wrapToPi(diff.Theta() - CameraInstance.Direction.Theta)*cos(diff.Phi()), ((diff.Phi() - CameraInstance.Direction.Phi)) };
 
         return {
-            atan2(up * Cam.Direction.UnitVector().CrossProduct(pro.Normalize()), Cam.Direction.UnitVector()*pro.Normalize()),
-            atan2(right * bro.Normalize().CrossProduct(Cam.Direction.UnitVector()), Cam.Direction.UnitVector()*bro.Normalize() )
+            atan2(up * CameraInstance.Direction.UnitVector().CrossProduct(pro.Normalize()), CameraInstance.Direction.UnitVector()*pro.Normalize()),
+            atan2(right * bro.Normalize().CrossProduct(CameraInstance.Direction.UnitVector()), CameraInstance.Direction.UnitVector()*bro.Normalize() )
         };
 
     }
@@ -228,37 +223,36 @@ class Context
         int cols = Pixels[0].size();
         for (int i = 0; i<Pixels.size(); i++){
             for (int j = 0; j<Pixels[0].size(); j++){
-            //point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
-            point3 u = Cam.Direction.UnitVector().RotatePhi90Up();
-            point3 r = Cam.Direction.UnitVector().RotateTheta90YX();
+            //point3 d = ( CameraInstance.Direction + direction3( (( (double)j / cols) - 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
+            point3 u = CameraInstance.Direction.UnitVector().RotatePhi90Up();
+            point3 r = CameraInstance.Direction.UnitVector().RotateTheta90YX();
             point3 l = u.Rotate(r, ((( (double)j / cols) - 0.5)*PixelRatio));
             point3 h = r.Rotate(u,(( (double)i / rows) - 0.5));
             //d = u.CrossProduct(d).Rotate(d, (( (double)i / rows) - 0.5)*cos((( (double)j / cols) - 0.5)*PixelRatio)*(1-cos(( (double)i / rows) - 0.5)));
             point3 d = l.CrossProduct(h).Normalize();
-            /*point3 d = Cam.Direction.UnitVector().RotatePhi90Up().Rotate(
-                Cam.Direction.UnitVector().RotateTheta90YX().Rotate(
-                        Cam.Direction.UnitVector(), 
+            /*point3 d = CameraInstance.Direction.UnitVector().RotatePhi90Up().Rotate(
+                CameraInstance.Direction.UnitVector().RotateTheta90YX().Rotate(
+                        CameraInstance.Direction.UnitVector(), 
                         tan(( (double)i / rows) - 0.5) ), ((( (double)j / cols) - 0.5)*2.06));*/
-            //point3 d = ( Cam.Direction + direction3( (( (double)j / cols) - 0.5) *2.06, - (( (double)i / rows) - 0.5 ) ) ).UnitVector();
+            //point3 d = ( CameraInstance.Direction + direction3( (( (double)j / cols) - 0.5) *2.06, - (( (double)i / rows) - 0.5 ) ) ).UnitVector();
             //si risolve per tutti i piani/triangoli
-            double min_t = 0.0/0;
-            double min_t_u = 0, min_t_v = 0;
+            double min_t = NAN;
             Pixels[i][j].Char = ' ';
             Pixels[i][j].Distance = 0.0/0;
-            for(int f=0; f<NumberOfThings; f++)
+            for(int f=0; f<Triangles.size(); f++)
                 {
-                    point3 B = Things[f].b - Things[f].a;
-                    point3 C = Things[f].c - Things[f].a;
-                    const point3& P0 = Things[f].a;
+                    point3 B = Triangles[f].b - Triangles[f].a;
+                    point3 C = Triangles[f].c - Triangles[f].a;
+                    const point3& P0 = Triangles[f].a;
                     double det = B.Z * C.Y * d.X - B.Y * C.Z * d.X - B.Z * C.X * d.Y + B.X * C.Z * d.Y + B.Y * C.X * d.Z - B.X * C.Y * d.Z;
-                    point3 k = Cam.Position - P0;
+                    point3 k = CameraInstance.Position - P0;
                     double t = point3(-B.Z * C.Y + B.Y * C.Z, B.Z * C.X - B.X * C.Z, -B.Y * C.X + B.X * C.Y) * k / det;
                     double u = point3(C.Z * d.Y - C.Y * d.Z, -C.Z * d.X + C.X * d.Z, C.Y * d.X - C.X * d.Y) * k / det;
                     double v = point3(-B.Z * d.Y + B.Y * d.Z, B.Z * d.X - B.X * d.Z, -B.Y * d.X + B.X * d.Y) * k / det;
                     //si salva il carattere corrispondente alla distanza minore
                     if ((t>0)&&(u>=0)&&(v>=0)&&(u<=1)&&(v<=1)&&(u+v<=1)) {
                         if ((t<min_t)||(min_t!=min_t)) {
-                            min_t = t; min_t_u = u; min_t_v = v; 
+                            min_t = t; 
                             Pixels[i][j].Char = '#';
                             Pixels[i][j].Colour = f+1;
                             Pixels[i][j].Distance = t;
@@ -267,9 +261,9 @@ class Context
                 }
             }
         }
-        for(int i= 0; i<ThingsP.size(); i++){
-            double distance = (ThingsP[i] - Cam.Position).Length();
-            point2 projection = Project(ThingsP[i]);
+        for(int i= 0; i<Points.size(); i++){
+            double distance = (Points[i] - CameraInstance.Position).Length();
+            point2 projection = Project(Points[i]);
             int yy = (int)round(((projection.X / PixelRatio )+0.5)*cols);
             int xx = (int)round(((-projection.Y)+0.5)*rows);
             if((xx>=0)&&(yy>=0)&&(xx<rows)&&(yy<cols)){
@@ -295,20 +289,18 @@ class Context
             
         int s=0;
         if(debug){
-            point3 diff = point3(10,0,10) - Cam.Position;
-            point3 up = Cam.Direction.UnitVector().RotatePhi90Up();
-            point3 right = Cam.Direction.UnitVector().RotateTheta90YX();
+            point3 diff = point3(10,0,10) - CameraInstance.Position;
+            point3 up = CameraInstance.Direction.UnitVector().RotatePhi90Up();
+            point3 right = CameraInstance.Direction.UnitVector().RotateTheta90YX();
             point3 pro = up.OddPart(diff);
             point3 bro = right.OddPart(diff);
-            mvprintw(s++, 0, "theta---: %.2f phi---: %.2f", Cam.Direction.Theta, Cam.Direction.Phi);
+            mvprintw(s++, 0, "theta---: %.2f phi---: %.2f", CameraInstance.Direction.Theta, CameraInstance.Direction.Phi);
             mvprintw(s++, 0, "thetapro: %.2f phipro: %.2f", pro.Theta(), pro.Phi());
             mvprintw(s++, 0, "thetabro: %.2f phibro: %.2f", bro.Theta(), bro.Phi());
             mvprintw(s++, 0, "diff-len: %.2f diff-norm-len: %.2f", diff.Length(), diff.Normalize().Length());
-            mvprintw(s++, 0, "thetadif: %.2f phidif: %.2f", atan2(up * Cam.Direction.UnitVector().CrossProduct(pro.Normalize()), Cam.Direction.UnitVector()*pro.Normalize()),
-            atan2(right * Cam.Direction.UnitVector().CrossProduct(bro.Normalize()), Cam.Direction.UnitVector()*bro.Normalize() ));
-            mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", Cam.Position.X, Cam.Position.Y, Cam.Position.Z);
-            mvprintw(s++, 0, "q = %.2f", q);
-            mvprintw(s++, 0, "p = %.2f", p);
+            mvprintw(s++, 0, "thetadif: %.2f phidif: %.2f", atan2(up * CameraInstance.Direction.UnitVector().CrossProduct(pro.Normalize()), CameraInstance.Direction.UnitVector()*pro.Normalize()),
+            atan2(right * CameraInstance.Direction.UnitVector().CrossProduct(bro.Normalize()), CameraInstance.Direction.UnitVector()*bro.Normalize() ));
+            mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", CameraInstance.Position.X, CameraInstance.Position.Y, CameraInstance.Position.Z);
             mvprintw(s++, 0, "cols = %d, rows = %d, c/r = %.2f", cols, rows, (float)cols/rows);
             mvprintw(s++, 0, "frame time = %d teomaxFPS = %.2f", frameDuration, 1000.0/frameDuration);
             mvprintw(s++, 0, "looop time = %ld fixed FPS = %.2f", MS_PER_FRAME.count(), 1000.0/MS_PER_FRAME.count());

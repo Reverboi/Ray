@@ -10,4 +10,7 @@ max render distance?
 shading, different charachters
 menu and text display
 collision
-double buffer
+double buffer?
+caricare gli oggetti da file a runtime
+makefile
+dividere in header-body
