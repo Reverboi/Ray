@@ -8,13 +8,8 @@
 #include <csignal>
 #include <fcntl.h>
 
-struct KeyInfo {
-    std::string device_name;
-    std::string state;
-    bool is; //hack
-};
-
-std::map<int, KeyInfo> key_states;
+//std::map<int, bool> key_states;
+std::array<bool, 256> key_states;
 std::mutex key_mutex;
 std::atomic<bool> running(true);
 
@@ -36,14 +31,10 @@ void signalHandler(int signum) {
 void readDeviceEvents(libevdev* dev, const std::string& name) {
     struct input_event ev;
     while (running) {
-        int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_BLOCKING, &ev);
+        int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_BLOCKING, &ev);  // non-blocking? sync?
         if (rc == 0 && ev.type == EV_KEY) {
             std::lock_guard<std::mutex> lock(key_mutex);
-            if (ev.value == 1 || ev.value == 2) {
-                key_states[ev.code] = {name, ev.value == 1 ? "Pressed" : "Held", true}; //hack
-            } else if (ev.value == 0) {
-                key_states.erase(ev.code);
-            }
+                key_states[ev.code] = ev.value;
         } else if (rc < 0 && rc != -EAGAIN) {
             break;
         }

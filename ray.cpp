@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <chrono>
+#include <mutex>
 struct direction3; // Forward declaration for point3.
 
 struct point3 
@@ -133,7 +134,7 @@ struct Pixel
 {
     char Char = ' ';
     int Colour = 0;
-    double Distance = 0.0/0;
+    double Distance = NAN;
     Pixel ( char a ) : Char(a) {};
     Pixel () = default;
 };
@@ -159,9 +160,15 @@ class Scene
     std::vector<triangle3> Triangles;
     std::vector<point3> Points;
 
+    std::array<bool, 256>& InputStateRef; // it'd be nice to wrap them toghether?
+    std::array<bool, 256> InputState;
+    std::mutex& InputStateMutex;
+
     std::vector<std::vector<struct Pixel>> Pixels;
-    Scene( int x, int y ) :
+    Scene(std::array<bool, 256>& key_states, std::mutex& key_mutex, int x, int y ) :
         Pixels( y, std::vector<Pixel>( x ) ),
+        InputStateRef(key_states),
+        InputStateMutex(key_mutex),
         CameraInstance( {0, 0, 7}, {0, 0} ),
         Triangles({{
             {{ 10, 0, 10 }, { 10, 5, 5 }, { 10, -5, 5 }},
@@ -215,8 +222,64 @@ class Scene
         };
 
     }
-    void Cast()
+    void Update()
     {
+        std::unique_lock<std::mutex> pock(InputStateMutex);
+        InputState = InputStateRef;
+        pock.unlock();
+
+        if (InputState[103]){
+            if ( CameraInstance.Direction.Phi <= M_PI_2 )
+                CameraInstance.Direction.Phi += 0.1;
+        }
+        if (InputState[108]){
+            if ( CameraInstance.Direction.Phi >= - M_PI_2 )
+            CameraInstance.Direction.Phi -= 0.1;
+        }
+        if (InputState[105]){
+            CameraInstance.Direction.Theta -= 0.15;
+        }
+        if (InputState[106]){
+            CameraInstance.Direction.Theta += 0.15;
+        }
+        if (InputState[30]){
+            CameraInstance.Position.Y -= step * cos(CameraInstance.Direction.Theta);
+            CameraInstance.Position.X += step * sin(CameraInstance.Direction.Theta);
+        }
+        if (InputState[32]){
+            CameraInstance.Position.Y += step * cos(CameraInstance.Direction.Theta);
+            CameraInstance.Position.X -= step * sin(CameraInstance.Direction.Theta);
+        }
+        if (InputState[17]){
+            CameraInstance.Position.X += step * cos(CameraInstance.Direction.Theta);
+            CameraInstance.Position.Y += step * sin(CameraInstance.Direction.Theta);
+        }
+        if (InputState[31]){
+            CameraInstance.Position.X -= step * cos(CameraInstance.Direction.Theta);
+            CameraInstance.Position.Y -= step * sin(CameraInstance.Direction.Theta);
+        }
+        if (InputState[57]){
+            if (!jumping){
+                vz = 0.6;
+                g = -0.03;
+                jumping = true;
+            }
+        }
+        CameraInstance.Position.Z += vz;
+        vz +=g;
+        if(CameraInstance.Position.Z<7){
+            CameraInstance.Position.Z = 7;
+            vz = 0;
+            g = 0;
+            jumping = false;
+        }
+        if (InputState[52]){
+        }
+        if (InputState[53]){
+        }
+        if (InputState[23]){
+            debug = !debug;
+        }  
         //dato un pixel a x-y
         //se ne calcola il vettore unitario corrispondente
         int rows = Pixels.size();
@@ -238,7 +301,7 @@ class Scene
             //si risolve per tutti i piani/triangoli
             double min_t = NAN;
             Pixels[i][j].Char = ' ';
-            Pixels[i][j].Distance = 0.0/0;
+            Pixels[i][j].Distance = NAN;
             for(int f=0; f<Triangles.size(); f++)
                 {
                     point3 B = Triangles[f].b - Triangles[f].a;
@@ -274,9 +337,9 @@ class Scene
             }}
         }
     }
-    void render(){
+    void Render(){
         clear();
-        Cast();
+        Update();
         const int rows = Pixels.size();
         const int cols = Pixels[0].size();
         for (int y = 0; y < rows; ++y){
