@@ -1,4 +1,5 @@
 implementare loop flessibile
+input handler is passing around the running atomic a lot.. make it a class? a static thing? in a namespace?
 risolvere la hak dei tasti
 Aggiungere la possibilità di cambiare visualizzazione
 ottimizzare Project/cast
@@ -10,7 +11,7 @@ max render distance?
 shading, different charachters
 menu and text display
 collision
-double buffer?
+double buffer? anche per l'input?
 caricare gli oggetti da file a runtime
 makefile
 dividere in header-body

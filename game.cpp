@@ -1,10 +1,18 @@
 #include <thread>
 #include "ray.cpp"
 #include "input_handler.cpp"
+#include <atomic>
+
+std::atomic<bool> running(true);
+
+void signalHandler(int signum) {
+    running.store(false,std::memory_order_relaxed);
+}
+
 int main() {
     signal(SIGINT, signalHandler);
 
-    std::thread monitor_thread(monitorDevices);
+    std::thread monitor_thread(monitorDevices, std::ref(running));
     // Inizializzazione di curses
     initscr();     // Inizializza il terminale in modalità curses
     start_color(); // Enable color functionality

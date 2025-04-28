@@ -2,16 +2,15 @@
 #include <libudev.h>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <map>
 #include <string>
-#include <atomic>
 #include <csignal>
 #include <fcntl.h>
 
 //std::map<int, bool> key_states;
 std::array<bool, 256> key_states;
 std::mutex key_mutex;
-std::atomic<bool> running(true);
 
 struct DeviceContext {
     int fd;
@@ -24,11 +23,7 @@ struct DeviceContext {
 std::mutex device_mutex;
 std::map<std::string, DeviceContext> device_threads;
 
-void signalHandler(int signum) {
-    running = false;
-}
-
-void readDeviceEvents(libevdev* dev, const std::string& name) {
+void readDeviceEvents(libevdev* dev, const std::string& name, const std::atomic<bool>& running){
     struct input_event ev;
     while (running) {
         int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_BLOCKING, &ev);  // non-blocking? sync?
@@ -41,7 +36,7 @@ void readDeviceEvents(libevdev* dev, const std::string& name) {
     }
 }
 
-void addDevice(struct udev_device* dev) {
+void addDevice(struct udev_device* dev, const std::atomic<bool>& running) {
     const char* devnode = udev_device_get_devnode(dev);
     if (!devnode) return;
 
@@ -68,7 +63,7 @@ void addDevice(struct udev_device* dev) {
     ctx.dev = evdev;
     ctx.devnode = devnode_str;
     ctx.name = name;
-    ctx.thread = std::thread(readDeviceEvents, evdev, name);
+    ctx.thread = std::thread(readDeviceEvents, evdev, name, std::ref(running));
 
     std::lock_guard<std::mutex> lock(device_mutex);
     device_threads[devnode_str] = std::move(ctx);
@@ -86,7 +81,7 @@ void removeDevice(const std::string& devnode) {
     }
 }
 
-void monitorDevices() {
+void monitorDevices(const std::atomic<bool>& running) {
     struct udev* udev = udev_new();
     struct udev_monitor* mon = udev_monitor_new_from_netlink(udev, "udev");
     udev_monitor_filter_add_match_subsystem_devtype(mon, "input", NULL);
@@ -103,7 +98,7 @@ void monitorDevices() {
     udev_list_entry_foreach(entry, devices) {
         const char* path = udev_list_entry_get_name(entry);
         struct udev_device* dev = udev_device_new_from_syspath(udev, path);
-        addDevice(dev);
+        addDevice(dev, running);
         udev_device_unref(dev);
     }
     udev_enumerate_unref(enumerate);
@@ -122,7 +117,7 @@ void monitorDevices() {
 
                 if (action == "add") {
                     if (udev_device_get_property_value(dev, "ID_INPUT_KEYBOARD"))
-                        addDevice(dev);
+                        addDevice(dev, running);
                 } else if (action == "remove") {
                     if (!devnode.empty())
                         removeDevice(devnode);
