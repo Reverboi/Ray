@@ -1,28 +1,9 @@
-#include <libevdev/libevdev.h>
-#include <libudev.h>
-#include <thread>
-#include <mutex>
-#include <atomic>
-#include <map>
-#include <string>
-#include <csignal>
-#include <fcntl.h>
+#include "input_handler.hpp"
 
-//std::map<int, bool> key_states;
 std::array<bool, 256> key_states;
 std::mutex key_mutex;
-
-struct DeviceContext {
-    int fd;
-    libevdev* dev;
-    std::thread thread;
-    std::string devnode;
-    std::string name;
-};
-
 std::mutex device_mutex;
 std::map<std::string, DeviceContext> device_threads;
-
 void readDeviceEvents(libevdev* dev, const std::string& name, const std::atomic<bool>& running){
     struct input_event ev;
     while (running) {

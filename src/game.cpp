@@ -1,8 +1,10 @@
 #include <thread>
-#include "ray.cpp"
-#include "input_handler.cpp"
+#include "ray.hpp"
+#include "input_handler.hpp"
+#include "ncurses_window.hpp"
 #include <atomic>
 
+extern std::atomic<bool> running;
 std::atomic<bool> running(true);
 
 void signalHandler(int signum) {
@@ -11,36 +13,26 @@ void signalHandler(int signum) {
 
 int main() {
     signal(SIGINT, signalHandler);
-
     std::thread monitor_thread(monitorDevices, std::ref(running));
-    // Inizializzazione di curses
-    initscr();     // Inizializza il terminale in modalità curses
-    start_color(); // Enable color functionality
-
-    // Initialize color pairs
-    init_pair(1, COLOR_RED, COLOR_BLACK);
-    init_pair(2, COLOR_GREEN, COLOR_BLACK);
-    init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(4, COLOR_BLUE, COLOR_BLACK);
-    init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(6, COLOR_CYAN, COLOR_BLACK);
-    init_pair(7, COLOR_WHITE, COLOR_BLACK);
-    cbreak();              // Disabilita il buffering dell'input
-    noecho();
-    // nodelay(stdscr, TRUE); makes getch() impatient
+    NcursesInit();
     int rows, cols;
-    getmaxyx(stdscr, rows, cols);
-    Scene SceneInstance(key_states, key_mutex, cols, rows);
-    refresh(); // Aggiorna lo schermo per visualizzare il testo
+    GetDimensions(rows, cols);
+
+    Scene SceneInstance(key_states, key_mutex, load_buffer, buffer_mutex, cols, rows);
+
     auto frameStart = std::chrono::high_resolution_clock::now();
     auto frameEnd = std::chrono::high_resolution_clock::now();
     auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
+    //std::thread ncurses_thread(RenderThread, std::ref(running));
     while (running) {
         frameStart = std::chrono::high_resolution_clock::now();
 
-        getmaxyx(stdscr, rows, cols);
+        GetDimensions(rows, cols);
         if ((rows!=SceneInstance.Pixels.size())||(cols!=SceneInstance.Pixels[0].size())){
             SceneInstance.Pixels = std::vector<std::vector<Pixel>>( rows, std::vector<Pixel>( cols ) );
+            std::unique_lock<std::mutex> lock(buffer_mutex);
+            load_buffer = std::vector<std::vector<Pixel>>(rows, std::vector<Pixel>(cols));
+            lock.unlock();
         }
         
         SceneInstance.Render();
@@ -52,10 +44,10 @@ int main() {
         }
     }
     // Chiudi curses e ripristina il terminale
-    endwin();
+    NcursesExit();
 
     monitor_thread.join();
-
+    //ncurses_thread.join();
     std::lock_guard<std::mutex> lock(device_mutex);
     for (auto& [_, ctx] : device_threads) {
         if (ctx.thread.joinable()) ctx.thread.detach();

@@ -1,9 +1,12 @@
+#pragma once
 #include <ncurses.h>
 #include <array>
 #include <vector>
 #include <cmath>
 #include <chrono>
 #include <mutex>
+#include "pixel.hpp"
+
 struct direction3; // Forward declaration for point3.
 
 struct point3 
@@ -86,11 +89,6 @@ struct direction3
     direction3 operator-(const direction3& o) { return { Theta-o.Theta, Phi-o.Phi }; };
 };
 
-point3::point3(const direction3& d, const double len) : point3(d.UnitVector() * len) {}
-
-direction3 point3::Direction() const { return { Theta(), Phi() }; }
-direction3::direction3(const point3& a) : direction3(a.Direction()) {}
-
 struct point2
 {
 	double X;
@@ -130,19 +128,7 @@ class Camera
     Camera( point3 p, direction3 d ) : Position( p ), Direction( d ), Velocity(), DirectionDelta() {};
 };
 
-struct Pixel
-{
-    char Char = ' ';
-    int Colour = 0;
-    double Distance = NAN;
-    Pixel ( char a ) : Char(a) {};
-    Pixel () = default;
-};
-double wrapToPi(double angle) {
-    angle = std::fmod(angle + M_PI, 2 * M_PI);
-    if (angle < 0) angle += 2 * M_PI;
-    return angle - M_PI;
-}
+double wrapToPi(double angle);
 
 constexpr int FPS = 28; // do these two really need to be consdtexpr? what if i want  to be able to change fps mid-game for any reasson
 constexpr std::chrono::milliseconds MS_PER_FRAME(1000 / FPS); // if you keep them contexpr and bring them inside Scene you'll need static as well
@@ -160,15 +146,20 @@ class Scene
     std::vector<triangle3> Triangles;
     std::vector<point3> Points;
 
-    std::array<bool, 256>& InputStateRef; // it'd be nice to wrap them toghether?
+    const std::array<bool, 256>& InputStateRef; // it'd be nice to wrap them toghether?
     std::array<bool, 256> InputState;
     std::mutex& InputStateMutex;
 
+    std::vector<std::vector<struct Pixel>>& OutputStateRef; // it'd be nice to wrap them toghether?
+    std::mutex& OutputStateMutex;
+
     std::vector<std::vector<struct Pixel>> Pixels;
-    Scene(std::array<bool, 256>& key_states, std::mutex& key_mutex, int x, int y ) :
+    Scene(const std::array<bool, 256>& key_states, std::mutex& key_mutex, std::vector<std::vector<struct Pixel>>& load_buffer, std::mutex& buffer_mutex, int x, int y ) :
         Pixels( y, std::vector<Pixel>( x ) ),
         InputStateRef(key_states),
         InputStateMutex(key_mutex),
+        OutputStateRef(load_buffer),
+        OutputStateMutex(buffer_mutex),
         CameraInstance( {0, 0, 7}, {0, 0} ),
         Triangles({{
             {{ 10, 0, 10 }, { 10, 5, 5 }, { 10, -5, 5 }},
@@ -178,6 +169,7 @@ class Scene
             {{ 4, -2, 0 }, { 4, +2, 0 }, { 6, 0, 6 }}
             }})
         {
+        OutputStateRef = Pixels;
         Points.push_back({0,0,0});
         for (int _i=1; _i<=20; _i++)
         {
@@ -284,8 +276,26 @@ class Scene
         //se ne calcola il vettore unitario corrispondente
         int rows = Pixels.size();
         int cols = Pixels[0].size();
-        for (int i = 0; i<Pixels.size(); i++){
-            for (int j = 0; j<Pixels[0].size(); j++){
+        for (int i = 0; i<rows; i++){
+            for (int j = 0; j<cols; j++){
+                Pixels[i][j].Char = ' ';
+                Pixels[i][j].Distance = NAN;
+            }
+        }
+        for(int i = 0; i < Points.size(); i++){
+            double distance = (Points[i] - CameraInstance.Position).Length();
+            point2 projection = Project(Points[i]);
+            int yy = (int)round(((projection.X / PixelRatio )+0.5)*cols);
+            int xx = (int)round(((-projection.Y)+0.5)*rows);
+            if((xx>=0)&&(yy>=0)&&(xx<rows)&&(yy<cols)){
+            if ((distance>0)&&((Pixels[xx][yy].Distance>distance)||(Pixels[xx][yy].Distance!=Pixels[xx][yy].Distance))){
+                Pixels[xx][yy].Distance = distance;
+                Pixels[xx][yy].Char = '+';
+                Pixels[xx][yy].Colour = 7;
+            }}
+        }
+        for (int i = 0; i < Pixels.size(); i++) {
+            for (int j = 0; j < Pixels[0].size(); j++) {
             //point3 d = ( CameraInstance.Direction + direction3( (( (double)j / cols) - 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
             point3 u = CameraInstance.Direction.UnitVector().RotatePhi90Up();
             point3 r = CameraInstance.Direction.UnitVector().RotateTheta90YX();
@@ -299,43 +309,30 @@ class Scene
                         tan(( (double)i / rows) - 0.5) ), ((( (double)j / cols) - 0.5)*2.06));*/
             //point3 d = ( CameraInstance.Direction + direction3( (( (double)j / cols) - 0.5) *2.06, - (( (double)i / rows) - 0.5 ) ) ).UnitVector();
             //si risolve per tutti i piani/triangoli
-            double min_t = NAN;
-            Pixels[i][j].Char = ' ';
-            Pixels[i][j].Distance = NAN;
-            for(int f=0; f<Triangles.size(); f++)
-                {
-                    point3 B = Triangles[f].b - Triangles[f].a;
-                    point3 C = Triangles[f].c - Triangles[f].a;
-                    const point3& P0 = Triangles[f].a;
-                    double det = B.Z * C.Y * d.X - B.Y * C.Z * d.X - B.Z * C.X * d.Y + B.X * C.Z * d.Y + B.Y * C.X * d.Z - B.X * C.Y * d.Z;
-                    point3 k = CameraInstance.Position - P0;
-                    double t = point3(-B.Z * C.Y + B.Y * C.Z, B.Z * C.X - B.X * C.Z, -B.Y * C.X + B.X * C.Y) * k / det;
-                    double u = point3(C.Z * d.Y - C.Y * d.Z, -C.Z * d.X + C.X * d.Z, C.Y * d.X - C.X * d.Y) * k / det;
-                    double v = point3(-B.Z * d.Y + B.Y * d.Z, B.Z * d.X - B.X * d.Z, -B.Y * d.X + B.X * d.Y) * k / det;
-                    //si salva il carattere corrispondente alla distanza minore
-                    if ((t>0)&&(u>=0)&&(v>=0)&&(u<=1)&&(v<=1)&&(u+v<=1)) {
-                        if ((t<min_t)||(min_t!=min_t)) {
-                            min_t = t; 
-                            Pixels[i][j].Char = '#';
-                            Pixels[i][j].Colour = f+1;
-                            Pixels[i][j].Distance = t;
+            
+            for(int f = 0; f < Triangles.size(); f++) {
+                point3 B = Triangles[f].b - Triangles[f].a;
+                point3 C = Triangles[f].c - Triangles[f].a;
+                const point3& P0 = Triangles[f].a;
+                double det = B.Z * C.Y * d.X - B.Y * C.Z * d.X - B.Z * C.X * d.Y + B.X * C.Z * d.Y + B.Y * C.X * d.Z - B.X * C.Y * d.Z;
+                point3 k = CameraInstance.Position - P0;
+                double t = point3(-B.Z * C.Y + B.Y * C.Z, B.Z * C.X - B.X * C.Z, -B.Y * C.X + B.X * C.Y) * k / det;
+                double u = point3(C.Z * d.Y - C.Y * d.Z, -C.Z * d.X + C.X * d.Z, C.Y * d.X - C.X * d.Y) * k / det;
+                double v = point3(-B.Z * d.Y + B.Y * d.Z, B.Z * d.X - B.X * d.Z, -B.Y * d.X + B.X * d.Y) * k / det;
+                //si salva il carattere corrispondente alla distanza minore
+                if ((t>0)&&(u>=0)&&(v>=0)&&(u<=1)&&(v<=1)&&(u+v<=1)) {
+                    if ((Pixels[i][j].Distance>t)||(Pixels[i][j].Distance!=Pixels[i][j].Distance)) {
+                        Pixels[i][j].Char = '#';
+                        Pixels[i][j].Colour = f+1;
+                        Pixels[i][j].Distance = t;
                         }
                     }
                 }
             }
         }
-        for(int i= 0; i<Points.size(); i++){
-            double distance = (Points[i] - CameraInstance.Position).Length();
-            point2 projection = Project(Points[i]);
-            int yy = (int)round(((projection.X / PixelRatio )+0.5)*cols);
-            int xx = (int)round(((-projection.Y)+0.5)*rows);
-            if((xx>=0)&&(yy>=0)&&(xx<rows)&&(yy<cols)){
-            if ((distance>0)&&((Pixels[xx][yy].Distance>distance)||(Pixels[xx][yy].Distance!=Pixels[xx][yy].Distance))){
-                Pixels[xx][yy].Distance = distance;
-                Pixels[xx][yy].Char = '+';
-                Pixels[xx][yy].Colour = 7;
-            }}
-        }
+        std::unique_lock<std::mutex> mock(OutputStateMutex);
+        OutputStateRef = Pixels;
+        mock.unlock();
     }
     void Render(){
         clear();
