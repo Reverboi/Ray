@@ -2,11 +2,24 @@
 
 point3::point3(const direction3& d, const double len) : point3(d.UnitVector() * len) {}
 
-direction3 point3::Direction() const { return { Theta(), Phi() }; }
+direction3 point3::Direction() const {
+    return {Theta(), Phi()};
+}
 direction3::direction3(const point3& a) : direction3(a.Direction()) {}
 
-double wrapToPi(double angle) {
-    angle = std::fmod(angle + M_PI, 2 * M_PI);
-    if (angle < 0) angle += 2 * M_PI;
-    return angle - M_PI;
+void UpdateLoop(Scene& ref, std::atomic<bool>& running) {
+    auto frameStart = std::chrono::high_resolution_clock::now();
+    auto frameEnd = std::chrono::high_resolution_clock::now();
+    auto frameDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
+    while (running) {
+        frameStart = std::chrono::high_resolution_clock::now();
+        ref.Update();
+        frameEnd = std::chrono::high_resolution_clock::now();
+        auto frameDuration =
+            std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
+        if (frameDuration < MS_PER_UPDATE) {
+            std::this_thread::sleep_for(MS_PER_UPDATE - frameDuration);
+        }
+    }
 }

@@ -1,11 +1,10 @@
 implementare loop flessibile
-input handler is passing around the running atomic a lot.. make it a class? a static thing? in a namespace?
-risolvere la hak dei tasti
+consistent aspect ratio
+8 direzioni di movimento
 Aggiungere la possibilità di cambiare visualizzazione
 ottimizzare Project/cast
 sistemare/minimizzare ogni chiamata chiamata goniometrica
 refactoring delle definizioni
-modularizzazione dei file
 possibilità di renderizzare in una finestra sdl2 o opengl
 max render distance?
 shading, different charachters
@@ -13,6 +12,4 @@ menu and text display
 collision
 double buffer? anche per l'input?
 caricare gli oggetti da file a runtime
-makefile
-dividere in header-body
 namespace

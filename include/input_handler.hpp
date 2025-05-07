@@ -1,15 +1,16 @@
 #pragma once
+#include <fcntl.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
-#include <thread>
-#include <mutex>
-#include <atomic>
-#include <map>
-#include <string>
-#include <csignal>
-#include <fcntl.h>
 
-//std::map<int, bool> key_states;
+#include <atomic>
+#include <csignal>
+#include <map>
+#include <mutex>
+#include <string>
+#include <thread>
+
+// std::map<int, bool> key_states;
 extern std::array<bool, 256> key_states;
 extern std::mutex key_mutex;
 
