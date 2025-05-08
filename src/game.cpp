@@ -3,7 +3,7 @@
 
 #include "input_handler.hpp"
 #include "ncurses_window.hpp"
-#include "ray.hpp"
+#include "scene.hpp"
 
 extern std::atomic<bool> running;
 std::atomic<bool> running(true);
