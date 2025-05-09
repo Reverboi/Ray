@@ -1,3 +1,4 @@
+reintegra ncurses window in scene or a context containing the scene
 implementare loop flessibile
 consistent aspect ratio
 8 direzioni di movimento
@@ -10,6 +11,6 @@ max render distance?
 shading, different charachters
 menu and text display
 collision
-double buffer? anche per l'input?
+double buffer anche per l'input? rinomina sti pixel
 caricare gli oggetti da file a runtime
 namespace

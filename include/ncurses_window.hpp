@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "pixel.hpp"
-extern std::vector<std::vector<struct Pixel>> load_buffer;
 extern std::mutex buffer_mutex;
 void GetDimensions(int& rows, int& cols);
 

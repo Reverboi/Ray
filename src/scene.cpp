@@ -1,12 +1,13 @@
 #include "scene.hpp"
 
 Scene::Scene(const std::array<bool, 256>& key_states, std::mutex& key_mutex,
-             std::vector<std::vector<struct Pixel>>& load_buffer, std::mutex& buffer_mutex, int x,
-             int y)
-    : Pixels(y, std::vector<Pixel>(x)),
-      InputStateRef(key_states),
+             std::mutex& buffer_mutex, int x, int y)
+    : InputStateRef(key_states),
       InputStateMutex(key_mutex),
-      OutputStateRef(load_buffer),
+      Pix0(y, std::vector<Pixel>(x)),
+      Pix1(y, std::vector<Pixel>(x)),
+      Pixels(Pix0),
+      Rixels(Pix1),
       OutputStateMutex(buffer_mutex),
       CameraInstance({0, 0, 7}, {0, 0}),
       Triangles({{{{10, 0, 10}, {10, 5, 5}, {10, -5, 5}},
@@ -14,7 +15,6 @@ Scene::Scene(const std::array<bool, 256>& key_states, std::mutex& key_mutex,
                   {{8, +2, 0}, {4, +2, 0}, {6, 0, 6}},
                   {{8, -2, 0}, {8, +2, 0}, {6, 0, 6}},
                   {{4, -2, 0}, {4, +2, 0}, {6, 0, 6}}}}) {
-    OutputStateRef = Pixels;
     Points.push_back({0, 0, 0});
     for (int _i = 1; _i <= 20; _i++) {
         double i = (double)_i;
@@ -183,19 +183,20 @@ void Scene::Update() {
         }
     }
     std::unique_lock<std::mutex> mock(OutputStateMutex);
-    OutputStateRef = Pixels;
+    Rixels = Pixels;
+    Pixels = &Pixels == &Pix0 ? Pix1 : Pix0;
     mock.unlock();
 }
 void Scene::Render() {
     clear();
-    Update();
-    const int rows = Pixels.size();
-    const int cols = Pixels[0].size();
+    std::unique_lock<std::mutex> lock(OutputStateMutex);
+    const int rows = Rixels.size();
+    const int cols = Rixels[0].size();
     for (int y = 0; y < rows; ++y) {
         for (int x = 0; x < cols; ++x) {
-            attron(COLOR_PAIR(Pixels[y][x].Colour));
-            mvaddch(y, x, Pixels[y][x].Char);
-            attroff(COLOR_PAIR(Pixels[y][x].Colour));
+            attron(COLOR_PAIR(Rixels[y][x].Colour));
+            mvaddch(y, x, Rixels[y][x].Char);
+            attroff(COLOR_PAIR(Rixels[y][x].Colour));
         }
     }
 
@@ -225,6 +226,7 @@ void Scene::Render() {
         mvprintw(s++, 0, "looop time = %ld fixed FPS = %.2f", MS_PER_UPDATE.count(),
                  1000.0 / MS_PER_UPDATE.count());
     }
+    lock.unlock();
     refresh();  // Aggiorna lo schermo
 }
 void UpdateLoop(Scene& ref, std::atomic<bool>& running) {

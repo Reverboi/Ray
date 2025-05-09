@@ -11,6 +11,7 @@ std::atomic<bool> running(true);
 void signalHandler(int signum) {
     running.store(false, std::memory_order_relaxed);
 }
+
 constexpr std::chrono::milliseconds MS_PER_RENDER(60);
 int main() {
     signal(SIGINT, signalHandler);
@@ -19,7 +20,7 @@ int main() {
     int rows, cols;
     GetDimensions(rows, cols);
 
-    Scene SceneInstance(key_states, key_mutex, load_buffer, buffer_mutex, cols, rows);
+    Scene SceneInstance(key_states, key_mutex, buffer_mutex, cols, rows);
     std::thread Ray_thread(UpdateLoop, std::ref(SceneInstance), std::ref(running));
 
     auto frameStart = std::chrono::high_resolution_clock::now();
@@ -32,13 +33,12 @@ int main() {
 
         GetDimensions(rows, cols);
         if ((rows != SceneInstance.Pixels.size()) || (cols != SceneInstance.Pixels[0].size())) {
+            std::lock_guard<std::mutex> lock(buffer_mutex);
             SceneInstance.Pixels = std::vector<std::vector<Pixel>>(rows, std::vector<Pixel>(cols));
-            std::unique_lock<std::mutex> lock(buffer_mutex);
-            load_buffer = std::vector<std::vector<Pixel>>(rows, std::vector<Pixel>(cols));
-            lock.unlock();
+            SceneInstance.Rixels = std::vector<std::vector<Pixel>>(rows, std::vector<Pixel>(cols));
         }
 
-        Render();
+        SceneInstance.Render();
 
         std::this_thread::sleep_for(MS_PER_RENDER);
     }
