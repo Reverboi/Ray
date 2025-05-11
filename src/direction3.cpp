@@ -20,3 +20,5 @@ direction3::direction3(const direction3&) = default;
 direction3::direction3(direction3&&) = default;
 direction3::direction3() = default;
 direction3::direction3(const point3& a) : direction3(a.Direction()) {}
+direction3& direction3::operator=(const direction3&) = default;
+direction3& direction3::operator=(direction3&&) = default;

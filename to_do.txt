@@ -1,5 +1,6 @@
-reintegra ncurses window in scene or a context containing the scene
 implementare loop flessibile
+definire bene cosa è context e cosa è scene
+namespace
 consistent aspect ratio
 8 direzioni di movimento
 Aggiungere la possibilità di cambiare visualizzazione
@@ -13,4 +14,3 @@ menu and text display
 collision
 double buffer anche per l'input? rinomina sti pixel
 caricare gli oggetti da file a runtime
-namespace

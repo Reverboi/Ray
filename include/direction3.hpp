@@ -15,6 +15,6 @@ struct direction3 {
     direction3(const direction3&);
     direction3(direction3&&);
     direction3();
-    direction3& operator=(const direction3&) = default;
-    direction3& operator=(direction3&&) = default;
+    direction3& operator=(const direction3&);
+    direction3& operator=(direction3&&);
 };

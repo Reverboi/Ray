@@ -44,10 +44,7 @@ class Scene {
     std::vector<std::vector<struct Pixel>>& Rixels;
     std::vector<std::vector<struct Pixel>> Pix0;
     std::vector<std::vector<struct Pixel>> Pix1;
-    Scene(const std::array<bool, 256>& key_states, std::mutex& key_mutex, std::mutex& buffer_mutex,
-          int x, int y);
+    Scene(const std::array<bool, 256>& key_states, std::mutex& key_mutex, std::mutex& buffer_mutex);
     point2 Project(const point3& obj);
     void Update();
-    void Render();
 };
-void UpdateLoop(Scene& ref, std::atomic<bool>& running);
