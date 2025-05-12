@@ -2,7 +2,6 @@ implementare loop flessibile
 definire bene cosa è context e cosa è scene
 namespace
 consistent aspect ratio
-8 direzioni di movimento
 Aggiungere la possibilità di cambiare visualizzazione
 ottimizzare Project/cast
 sistemare/minimizzare ogni chiamata chiamata goniometrica

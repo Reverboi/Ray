@@ -24,6 +24,7 @@ constexpr std::chrono::milliseconds MS_PER_UPDATE(
 class Scene {
    public:
     Camera CameraInstance;
+
     double PixelRatio = 2.06;  // 2.06
     bool jumping = false;
     bool debug = true;

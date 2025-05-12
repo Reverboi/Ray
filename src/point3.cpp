@@ -34,7 +34,7 @@ direction3 point3::Direction() const {
 
 point3::point3(const point3&) = default;
 point3::point3(point3&&) = default;
-point3::point3() = default;
+point3::point3() : X(0.0), Y(0.0), Z(0.0){};
 
 point3& point3::operator=(const point3&) = default;
 point3& point3::operator=(point3&&) = default;
@@ -42,8 +42,25 @@ point3& point3::operator=(point3&&) = default;
 point3 point3::Normalize() const {
     return *this / Length();
 }
+
 point3 point3::operator+(const point3& other) const {
     return {X + other.X, Y + other.Y, Z + other.Z};
+}
+point3& point3::operator+=(const point3& other) {
+    *this = *this + other;
+    return *this;
+}
+point3& point3::operator-=(const point3& other) {
+    *this = *this - other;
+    return *this;
+}
+point3& point3::operator*=(const double p) {
+    *this = *this * p;
+    return *this;
+}
+point3& point3::operator/=(const double p) {
+    *this = *this / p;
+    return *this;
 }
 point3 point3::operator-(const point3& other) const {
     return {X - other.X, Y - other.Y, Z - other.Z};

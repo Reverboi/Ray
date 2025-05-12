@@ -73,22 +73,28 @@ void Scene::Update() {
     if (InputState[106]) {
         CameraInstance.Direction.Theta += 0.15;
     }
-    if (InputState[30]) {
-        CameraInstance.Position.Y -= step * cos(CameraInstance.Direction.Theta);
-        CameraInstance.Position.X += step * sin(CameraInstance.Direction.Theta);
+    CameraInstance.Speed = point3();
+    if (InputState[30]) {  // A
+        CameraInstance.Speed +=
+            point3(sin(CameraInstance.Direction.Theta), -cos(CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[32]) {
-        CameraInstance.Position.Y += step * cos(CameraInstance.Direction.Theta);
-        CameraInstance.Position.X -= step * sin(CameraInstance.Direction.Theta);
+    if (InputState[32]) {  // D
+        CameraInstance.Speed +=
+            point3(-sin(CameraInstance.Direction.Theta), cos(CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[17]) {
-        CameraInstance.Position.X += step * cos(CameraInstance.Direction.Theta);
-        CameraInstance.Position.Y += step * sin(CameraInstance.Direction.Theta);
+    if (InputState[17]) {  // W
+        CameraInstance.Speed +=
+            point3(cos(CameraInstance.Direction.Theta), sin(CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[31]) {
-        CameraInstance.Position.X -= step * cos(CameraInstance.Direction.Theta);
-        CameraInstance.Position.Y -= step * sin(CameraInstance.Direction.Theta);
+    if (InputState[31]) {  // S
+        CameraInstance.Speed +=
+            point3(-cos(CameraInstance.Direction.Theta), -sin(CameraInstance.Direction.Theta), 0.0);
     }
+    if (InputState[30] || InputState[32] || InputState[31] || InputState[17]) {
+        CameraInstance.Speed.Normalize();
+        CameraInstance.Speed *= step;
+    }
+    CameraInstance.Position += CameraInstance.Speed;
     if (InputState[57]) {
         if (!jumping) {
             vz = 0.6;
@@ -130,7 +136,7 @@ void Scene::Update() {
             if ((distance > 0) && ((Pixels[xx][yy].Distance != Pixels[xx][yy].Distance) ||
                                    (Pixels[xx][yy].Distance > distance))) {
                 Pixels[xx][yy].Distance = distance;
-                Pixels[xx][yy].Char = '.';
+                Pixels[xx][yy].Char = '+';
                 Pixels[xx][yy].Colour = 7;
             }
         }
@@ -174,7 +180,7 @@ void Scene::Update() {
                 if ((t > 0) && (u >= 0) && (v >= 0) && (u <= 1) && (v <= 1) && (u + v <= 1)) {
                     if ((Pixels[i][j].Distance > t) ||
                         (Pixels[i][j].Distance != Pixels[i][j].Distance)) {
-                        Pixels[i][j].Char = '#';
+                        Pixels[i][j].Char = 'R';
                         Pixels[i][j].Colour = f + 1;
                         Pixels[i][j].Distance = t;
                     }
