@@ -1,15 +1,15 @@
 implementare loop flessibile
+menu and text display
+consistent aspect ratio
+caricare gli oggetti da file a runtime
+possibilità di renderizzare in una finestra sdl2 o opengl
 definire bene cosa è context e cosa è scene
 namespace
-consistent aspect ratio
 Aggiungere la possibilità di cambiare visualizzazione
 ottimizzare Project/cast
 sistemare/minimizzare ogni chiamata chiamata goniometrica
 refactoring delle definizioni
-possibilità di renderizzare in una finestra sdl2 o opengl
 max render distance?
 shading, different charachters
-menu and text display
 collision
 double buffer anche per l'input? rinomina sti pixel
-caricare gli oggetti da file a runtime

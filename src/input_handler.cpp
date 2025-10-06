@@ -4,13 +4,13 @@ std::array<bool, 256> key_states;
 std::mutex key_mutex;
 std::mutex device_mutex;
 std::map<std::string, DeviceContext> device_threads;
-void readDeviceEvents(libevdev* dev, const std::string& name, const std::atomic<bool>& running){
+void readDeviceEvents(libevdev* dev, const std::string& name, const std::atomic<bool>& running) {
     struct input_event ev;
     while (running) {
         int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_BLOCKING, &ev);  // non-blocking? sync?
         if (rc == 0 && ev.type == EV_KEY) {
             std::lock_guard<std::mutex> lock(key_mutex);
-                key_states[ev.code] = ev.value;
+            key_states[ev.code] = ev.value;
         } else if (rc < 0 && rc != -EAGAIN) {
             break;
         }
@@ -55,8 +55,7 @@ void removeDevice(const std::string& devnode) {
     auto it = device_threads.find(devnode);
     if (it != device_threads.end()) {
         close(it->second.fd);
-        if (it->second.thread.joinable())
-            it->second.thread.detach();
+        if (it->second.thread.joinable()) it->second.thread.join();
         libevdev_free(it->second.dev);
         device_threads.erase(it);
     }
@@ -90,18 +89,18 @@ void monitorDevices(const std::atomic<bool>& running) {
         FD_SET(fd, &fds);
 
         struct timeval tv = {0, 500000};
-        if (select(fd+1, &fds, NULL, NULL, &tv) > 0) {
+        if (select(fd + 1, &fds, NULL, NULL, &tv) > 0) {
             struct udev_device* dev = udev_monitor_receive_device(mon);
             if (dev) {
                 std::string action = udev_device_get_action(dev);
-                std::string devnode = udev_device_get_devnode(dev) ? udev_device_get_devnode(dev) : "";
+                std::string devnode =
+                    udev_device_get_devnode(dev) ? udev_device_get_devnode(dev) : "";
 
                 if (action == "add") {
                     if (udev_device_get_property_value(dev, "ID_INPUT_KEYBOARD"))
                         addDevice(dev, running);
                 } else if (action == "remove") {
-                    if (!devnode.empty())
-                        removeDevice(devnode);
+                    if (!devnode.empty()) removeDevice(devnode);
                 }
 
                 udev_device_unref(dev);
