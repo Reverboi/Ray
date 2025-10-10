@@ -8,19 +8,13 @@ Context::~Context() {
     endwin();
 }
 
-Context::Context(const std::array<bool, 256>& key_states, std::mutex& key_mutex,
-                 std::mutex& buffer_mutex)
-    : InputStateRef(key_states),
-      InputStateMutex(key_mutex),
-      OutputStateMutex(buffer_mutex),
-      SceneInstance(),
-      PixelBuffer(rows, cols),
-      bufferMutex(buffer_mutex) {
+Context::Context(const std::array<bool, 256>& key_states, std::mutex& key_mutex)
+    : InputStateRef(key_states), InputStateMutex(key_mutex), SceneInstance() {
     initscr();
     start_color();
     GetDimensions();
-    Buffer2D<Pixel> bu(rows, cols);
     PixelBuffer = DoubleBuffer<Buffer2D<Pixel>>(rows, cols);
+
     //  Initialize color pairs
     init_pair(1, COLOR_RED, COLOR_BLACK);
     init_pair(2, COLOR_GREEN, COLOR_BLACK);
@@ -37,61 +31,45 @@ Context::Context(const std::array<bool, 256>& key_states, std::mutex& key_mutex,
 }
 
 void Context::Render() {
-    clear();
-    std::unique_lock<std::mutex> lock(bufferMutex);
+    const auto& buf = PixelBuffer.Old();
+
     for (int y = 0; y < rows; ++y) {
         for (int x = 0; x < cols; ++x) {
-            attron(COLOR_PAIR(Rixels[y][x].Colour));
-            mvaddch(y, x, Rixels[y][x].Char);
-            attroff(COLOR_PAIR(Rixels[y][x].Colour));
+            attron(COLOR_PAIR(buf(y, x).Colour));
+            mvaddch(y, x, buf(y, x).Char);
+            attroff(COLOR_PAIR(buf(y, x).Colour));
         }
     }
 
     int s = 0;
     if (debug) {
-        point3 diff = point3(10, 0, 10) - SceneInstance.CameraInstance.Position;
-        point3 up = SceneInstance.CameraInstance.Direction.UnitVector().RotatePhi90Up();
-        point3 right = SceneInstance.CameraInstance.Direction.UnitVector().RotateTheta90YX();
+        auto scn = SceneInstance.Out();
+        point3 diff = point3(10, 0, 10) - scn.CameraInstance.Position;
+        point3 up = scn.CameraInstance.Direction.UnitVector().RotatePhi90Up();
+        point3 right = scn.CameraInstance.Direction.UnitVector().RotateTheta90YX();
         point3 pro = up.OddPart(diff);
         point3 bro = right.OddPart(diff);
-        mvprintw(s++, 0, "theta---: %.2f phi---: %.2f",
-                 SceneInstance.CameraInstance.Direction.Theta,
-                 SceneInstance.CameraInstance.Direction.Phi);
+        mvprintw(s++, 0, "theta---: %.2f phi---: %.2f", scn.CameraInstance.Direction.Theta,
+                 scn.CameraInstance.Direction.Phi);
         mvprintw(s++, 0, "thetapro: %.2f phipro: %.2f", pro.Theta(), pro.Phi());
         mvprintw(s++, 0, "thetabro: %.2f phibro: %.2f", bro.Theta(), bro.Phi());
         mvprintw(s++, 0, "diff-len: %.2f diff-norm-len: %.2f", diff.Length(),
                  diff.Normalize().Length());
-        mvprintw(s++, 0, "thetadif: %.2f phidif: %.2f",
-                 atan2(up * SceneInstance.CameraInstance.Direction.UnitVector().CrossProduct(
-                                pro.Normalize()),
-                       SceneInstance.CameraInstance.Direction.UnitVector() * pro.Normalize()),
-                 atan2(right * SceneInstance.CameraInstance.Direction.UnitVector().CrossProduct(
-                                   bro.Normalize()),
-                       SceneInstance.CameraInstance.Direction.UnitVector() * bro.Normalize()));
-        mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", SceneInstance.CameraInstance.Position.X,
-                 SceneInstance.CameraInstance.Position.Y, SceneInstance.CameraInstance.Position.Z);
-        mvprintw(s++, 0, "cols = %d, rows = %d, c/r = %.2f", cols, rows, (float)cols / rows);
+        mvprintw(
+            s++, 0, "thetadif: %.2f phidif: %.2f",
+            atan2(up * scn.CameraInstance.Direction.UnitVector().CrossProduct(pro.Normalize()),
+                  scn.CameraInstance.Direction.UnitVector() * pro.Normalize()),
+            atan2(right * scn.CameraInstance.Direction.UnitVector().CrossProduct(bro.Normalize()),
+                  scn.CameraInstance.Direction.UnitVector() * bro.Normalize()));
+        mvprintw(s++, 0, "X: %.2f Y: %.2f Z: %.2f", scn.CameraInstance.Position.X,
+                 scn.CameraInstance.Position.Y, scn.CameraInstance.Position.Z);
+        mvprintw(s++, 0, "cols = %d, rows = %d, c/r = %.2f", (int)cols, (int)rows,
+                 (float)cols / rows);
         mvprintw(s++, 0, "looop time = %ld fixed FPS = %.2f", MS_PER_UPDATE.count(),
                  1000.0 / MS_PER_UPDATE.count());
     }
-    lock.unlock();
     refresh();  // Aggiorna lo schermo
-}
-
-point2 Context::Project(const point3& obj, const Camera& cam) {
-    point3 diff = obj - cam.Position;
-
-    point3 up = cam.Direction.UnitVector().RotatePhi90Up();
-    point3 right = cam.Direction.UnitVector().RotateTheta90YX();
-    point3 pro = up.OddPart(diff);
-    point3 bro = right.OddPart(diff);
-    // return { wrapToPi(diff.Theta() - CameraInstance.Direction.Theta)*cos(diff.Phi()),
-    // ((diff.Phi() - CameraInstance.Direction.Phi)) };
-
-    return {atan2(up * cam.Direction.UnitVector().CrossProduct(pro.Normalize()),
-                  cam.Direction.UnitVector() * pro.Normalize()),
-            atan2(right * bro.Normalize().CrossProduct(cam.Direction.UnitVector()),
-                  cam.Direction.UnitVector() * bro.Normalize())};
+    PixelBuffer.CustomerSwap();
 }
 
 void Context::Update() {
@@ -99,8 +77,9 @@ void Context::Update() {
     InputState = InputStateRef;
     pock.unlock();
 
-    auto scn = SceneInstance.Old();
-    auto n_scn = SceneInstance.New();
+    auto& scn = SceneInstance.Old();
+    auto& n_scn = SceneInstance.New();
+
     n_scn.CameraInstance = scn.CameraInstance;
     if (InputState[103]) {
         if (scn.CameraInstance.Direction.Phi <= M_PI_2) n_scn.CameraInstance.Direction.Phi += 0.1;
@@ -149,7 +128,7 @@ void Context::Update() {
     n_scn.vz += n_scn.g;
     n_scn.CameraInstance.Position.Z += n_scn.vz;
 
-    if (scn.CameraInstance.Position.Z < 7) {
+    if (n_scn.CameraInstance.Position.Z < 7) {
         n_scn.CameraInstance.Position.Z = 7;
         n_scn.vz = 0;
         n_scn.g = 0;
@@ -162,35 +141,38 @@ void Context::Update() {
     if (InputState[23]) {
         debug = !debug;
     }
+    // add wait here
+    SceneInstance.WorkerSwap();
 }
 
-void Context::Rasterizer() {
-    // dato un pixel a x-y
-    // se ne calcola il vettore unitario corrispondente
-    int rows = Pixels.size();
-    int cols = Pixels[0].size();
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            Pixels[i][j].Char = ' ';
-            Pixels[i][j].Distance = NAN;
-        }
+void Context::Rasterize() {
+    const auto& scn = SceneInstance.Out();
+    auto& buf = PixelBuffer.New();
+
+    GetDimensions();
+    if ((rows != buf.rows()) || (cols != buf.cols())) {  // maybe we should take a quick break
+        buf = Buffer2D<Pixel>(rows, cols);
+        // PixelBuffer = DoubleBuffer<Buffer2D<Pixel>>(rows, cols);
     }
+
+    buf.fill(Pixel());  // unnecessary???
+
     for (int i = 0; i < scn.Points.size(); i++) {
         double distance = (scn.Points[i] - scn.CameraInstance.Position).Length();
-        point2 projection = Project(scn.Points[i], scn.CameraInstance);
+        point2 projection = scn.CameraInstance.Project(scn.Points[i]);
         int yy = (int)round(((projection.X / PixelRatio) + 0.5) * cols);
         int xx = (int)round(((-projection.Y) + 0.5) * rows);
         if ((xx >= 0) && (yy >= 0) && (xx < rows) && (yy < cols)) {
-            if ((distance > 0) && ((Pixels[xx][yy].Distance != Pixels[xx][yy].Distance) ||
-                                   (Pixels[xx][yy].Distance > distance))) {
-                Pixels[xx][yy].Distance = distance;
-                Pixels[xx][yy].Char = '+';
-                Pixels[xx][yy].Colour = 7;
+            if ((distance > 0) && ((buf(xx, yy).Distance != buf(xx, yy).Distance) ||
+                                   (buf(xx, yy).Distance > distance))) {
+                buf(xx, yy).Distance = distance;
+                buf(xx, yy).Char = '+';
+                buf(xx, yy).Colour = 7;
             }
         }
     }
-    for (int i = 0; i < Pixels.size(); i++) {
-        for (int j = 0; j < Pixels[0].size(); j++) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
             // point3 d = ( CameraInstance.Direction + direction3( (( (double)j / cols) -
             // 0.5)*2.06,  - (( (double)i / rows) - 0.5  ) )).UnitVector();
             point3 u = scn.CameraInstance.Direction.UnitVector().RotatePhi90Up();
@@ -226,8 +208,7 @@ void Context::Rasterizer() {
                     k / det;
                 // si salva il carattere corrispondente alla distanza minore
                 if ((t > 0) && (u >= 0) && (v >= 0) && (u <= 1) && (v <= 1) && (u + v <= 1)) {
-                    if ((Pixels[i][j].Distance > t) ||
-                        (Pixels[i][j].Distance != Pixels[i][j].Distance)) {
+                    if ((buf(i, j).Distance > t) || (buf(i, j).Distance != buf(i, j).Distance)) {
                         int a = rand() % 7;
                         char b = ' ';
                         switch (a) {
@@ -252,18 +233,16 @@ void Context::Rasterizer() {
                             case 6:
                                 b = 'i';
                         }
-                        Pixels[i][j].Char = b;
-                        Pixels[i][j].Colour = f + 1;
-                        Pixels[i][j].Distance = t;
+                        buf(i, j).Char = b;
+                        buf(i, j).Colour = f + 1;
+                        buf(i, j).Distance = t;
                     }
                 }
             }
         }
     }
-    std::unique_lock<std::mutex> mock(OutputStateMutex);
-    Rixels = Pixels;
-    Pixels = &Pixels == &Pix0 ? Pix1 : Pix0;
-    mock.unlock();
+    PixelBuffer.WorkerSwap();
+    SceneInstance.CustomerSwap();
 }
 
 void UpdateLoop(Context& ref, std::atomic<bool>& running) {
@@ -274,22 +253,25 @@ void UpdateLoop(Context& ref, std::atomic<bool>& running) {
     while (running) {
         frameStart = std::chrono::high_resolution_clock::now();
 
-        ref.GetDimensions();
-        if ((ref.rows != ref.SceneInstance.Pixels.size()) ||
-            (ref.cols != ref.SceneInstance.Pixels[0].size())) {
-            std::lock_guard<std::mutex> lock(ref.bufferMutex);
-            ref.SceneInstance.Pixels =
-                std::vector<std::vector<Pixel>>(ref.rows, std::vector<Pixel>(ref.cols));
-            ref.SceneInstance.Rixels =
-                std::vector<std::vector<Pixel>>(ref.rows, std::vector<Pixel>(ref.cols));
-        }
+        ref.Update();
 
-        ref.SceneInstance.Update();
         frameEnd = std::chrono::high_resolution_clock::now();
         auto frameDuration =
             std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
         if (frameDuration < MS_PER_UPDATE) {
             std::this_thread::sleep_for(MS_PER_UPDATE - frameDuration);
         }
+    }
+}
+
+void RenderLoop(Context& ref, std::atomic<bool>& running) {
+    while (running) {
+        ref.Render();
+    }
+}
+
+void RasterizeLoop(Context& ref, std::atomic<bool>& running) {
+    while (running) {
+        ref.Rasterize();
     }
 }

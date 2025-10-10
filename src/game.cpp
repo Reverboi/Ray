@@ -3,38 +3,30 @@
 
 #include "context.hpp"
 #include "input_handler.hpp"
+#include "logger.hpp"
 
-extern std::atomic<bool> running;
+extern std::atomic<bool> running(true);
 std::atomic<bool> running(true);
 
 void signalHandler(int signum) {
     running.store(false, std::memory_order_relaxed);
 }
 
-constexpr std::chrono::milliseconds MS_PER_RENDER(60);
-
 int main() {
     signal(SIGINT, signalHandler);
+    Logger::instance().enableFileOutput("log.txt");
     std::thread monitor_thread(monitorDevices, std::ref(running));
-    std::mutex buffer_mutex;
-    Context ContextInstance(key_states, key_mutex, buffer_mutex);
-    std::thread Ray_thread(UpdateLoop, std::ref(ContextInstance), std::ref(running));
-    /*
-    auto frameStart = std::chrono::high_resolution_clock::now();
-    auto frameEnd = std::chrono::high_resolution_clock::now();
-    auto frameDuration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
-    */
+    Context ContextInstance(key_states, key_mutex);
+    std::thread Ray_r_thread(RasterizeLoop, std::ref(ContextInstance), std::ref(running));
+    std::thread Ray_u_thread(UpdateLoop, std::ref(ContextInstance), std::ref(running));
+
     int rows, cols;
     while (running) {
-        // frameStart = std::chrono::high_resolution_clock::now();
-
         ContextInstance.Render();
-
-        std::this_thread::sleep_for(MS_PER_RENDER);
     }
     // Chiudi curses e ripristina il terminal
-    Ray_thread.join();
+    Ray_r_thread.join();
+    Ray_u_thread.join();
     monitor_thread.join();
 
     std::lock_guard<std::mutex> lock(device_mutex);

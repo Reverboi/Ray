@@ -2,16 +2,18 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "logger.hpp"
 template <typename T>
 class MilkMan {
    public:
+    // Define move assignment, should i copy/move over the rest of the data?
     MilkMan(MilkMan&& other) noexcept {
         for (int i = 0; i < 3; ++i) {
             buffers_[i] = std::move(other.buffers_[i]);
         }
     }
 
-    // Define move assignment
+    // Define move assignment, should i copy/move over the rest of the data?
     MilkMan& operator=(MilkMan&& other) noexcept {
         if (this != &other) {
             for (int i = 0; i < 3; ++i) {
@@ -33,7 +35,7 @@ class MilkMan {
 
         if (WorkerReadingIndex == CustomerReadingIndex) {  // customer has come
             WorkerWritingIndex = UsedIndex;
-        } else {  // customer has non come
+        } else {  // customer has not come
             WorkerWritingIndex = WorkerReadingIndex;
         }
         // WorkerWritingIndex = (WorkerReadingIndex == CustomerReadingIndex) ?? UsedIndex :
@@ -44,10 +46,11 @@ class MilkMan {
     }
 
     void CustomerSwap() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        cv.wait(lock, [] { return WorkerReadingIndex != CustomerReadingIndex });
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv.wait(lock, [this] { return WorkerReadingIndex != CustomerReadingIndex; });
         UsedIndex = CustomerReadingIndex;
         CustomerReadingIndex = FreshIndex;
+        lock.unlock();
     }
 
     inline const T& Out() const { return buffers_[CustomerReadingIndex]; }
@@ -57,7 +60,7 @@ class MilkMan {
    private:
     std::condition_variable cv;
     std::mutex mutex_;
-    // std::array<T, 3> buffers_;
+
     T buffers_[3];
     int CustomerReadingIndex = 0;
     int FreshIndex = 0;

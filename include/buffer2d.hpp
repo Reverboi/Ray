@@ -7,7 +7,7 @@ template <typename T>
 class Buffer2D {
    public:
     using size_type = std::size_t;
-
+    Buffer2D() : m_rows(0), m_cols(0) {}  // crazy that i need it.... investigate
     Buffer2D(size_type rows, size_type cols, const T& default_value = T{})
         : m_rows(rows), m_cols(cols), m_data(rows * cols, default_value) {}
 

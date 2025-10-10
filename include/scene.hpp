@@ -16,11 +16,6 @@
 #include "point3.hpp"
 #include "triangle3.hpp"
 
-constexpr int UPS = 16;
-constexpr std::chrono::milliseconds MS_PER_UPDATE(
-    1000 /
-    UPS);  // if you keep them contexpr and bring them inside Scene you'll need static as well
-
 class Scene {
    public:
     Camera CameraInstance;
