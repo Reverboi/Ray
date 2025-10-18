@@ -8,8 +8,7 @@ Context::~Context() {
     endwin();
 }
 
-Context::Context(const std::array<bool, 256>& key_states, std::mutex& key_mutex)
-    : InputStateRef(key_states), InputStateMutex(key_mutex), SceneInstance() {
+Context::Context() : SceneInstance(), InputHandlerInstance() {
     initscr();
     start_color();
     GetDimensions();
@@ -73,51 +72,47 @@ void Context::Render() {
 }
 
 void Context::Update() {
-    std::unique_lock<std::mutex> pock(InputStateMutex);
-    InputState = InputStateRef;
-    pock.unlock();
-
-    auto& scn = SceneInstance.Old();
+    const auto& scn = SceneInstance.Old();
     auto& n_scn = SceneInstance.New();
-
+    const auto& InputStateRef = InputHandlerInstance.key_states;  // const might cause a deep-copy?
     n_scn.CameraInstance = scn.CameraInstance;
-    if (InputState[103]) {
+    if (InputStateRef[103]) {
         if (scn.CameraInstance.Direction.Phi <= M_PI_2) n_scn.CameraInstance.Direction.Phi += 0.1;
     }
-    if (InputState[108]) {
+    if (InputStateRef[108]) {
         if (scn.CameraInstance.Direction.Phi >= -M_PI_2) n_scn.CameraInstance.Direction.Phi -= 0.1;
     }
-    if (InputState[105]) {
+    if (InputStateRef[105]) {
         n_scn.CameraInstance.Direction.Theta -= 0.15;
     }
-    if (InputState[106]) {
+    if (InputStateRef[106]) {
         n_scn.CameraInstance.Direction.Theta += 0.15;
     }
     n_scn.CameraInstance.Speed = point3();
-    if (InputState[30]) {  // A
+    if (InputStateRef[30]) {  // A
         n_scn.CameraInstance.Speed += point3(sin(scn.CameraInstance.Direction.Theta),
                                              -cos(scn.CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[32]) {  // D
+    if (InputStateRef[32]) {  // D
         n_scn.CameraInstance.Speed += point3(-sin(scn.CameraInstance.Direction.Theta),
                                              cos(scn.CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[17]) {  // W
+    if (InputStateRef[17]) {  // W
         n_scn.CameraInstance.Speed += point3(cos(scn.CameraInstance.Direction.Theta),
                                              sin(scn.CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[31]) {  // S
+    if (InputStateRef[31]) {  // S
         n_scn.CameraInstance.Speed += point3(-cos(scn.CameraInstance.Direction.Theta),
                                              -sin(scn.CameraInstance.Direction.Theta), 0.0);
     }
-    if (InputState[30] || InputState[32] || InputState[31] || InputState[17]) {
+    if (InputStateRef[30] || InputStateRef[32] || InputStateRef[31] || InputStateRef[17]) {
         n_scn.CameraInstance.Speed.Normalize();
         n_scn.CameraInstance.Speed *= scn.step;
     }
 
     n_scn.CameraInstance.Position += n_scn.CameraInstance.Speed;
 
-    if (InputState[57]) {
+    if (InputStateRef[57]) {
         if (!scn.jumping) {
             n_scn.vz = 0.6;
             n_scn.g = -0.03;
@@ -134,11 +129,11 @@ void Context::Update() {
         n_scn.g = 0;
         n_scn.jumping = false;
     }
-    if (InputState[52]) {
+    if (InputStateRef[52]) {
     }
-    if (InputState[53]) {
+    if (InputStateRef[53]) {
     }
-    if (InputState[23]) {
+    if (InputStateRef[23]) {
         debug = !debug;
     }
     // add wait here

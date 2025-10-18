@@ -3,7 +3,6 @@
 
 #include "context.hpp"
 #include "input_handler.hpp"
-#include "logger.hpp"
 
 extern std::atomic<bool> running(true);
 std::atomic<bool> running(true);
@@ -14,9 +13,10 @@ void signalHandler(int signum) {
 
 int main() {
     signal(SIGINT, signalHandler);
-    Logger::instance().enableFileOutput("log.txt");
+
     std::thread monitor_thread(monitorDevices, std::ref(running));
-    Context ContextInstance(key_states, key_mutex);
+
+    Context ContextInstance;
     std::thread Ray_r_thread(RasterizeLoop, std::ref(ContextInstance), std::ref(running));
     std::thread Ray_u_thread(UpdateLoop, std::ref(ContextInstance), std::ref(running));
 

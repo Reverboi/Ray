@@ -1,15 +1,16 @@
+#include <fcntl.h>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <ncurses.h>
-#include <thread>
-#include <mutex>
-#include <map>
-#include <string>
+#include <unistd.h>
+
 #include <atomic>
 #include <csignal>
-#include <fcntl.h>
-#include <unistd.h>
 #include <iostream>
+#include <map>
+#include <mutex>
+#include <string>
+#include <thread>
 
 struct KeyInfo {
     std::string device_name;
@@ -90,8 +91,7 @@ void removeDevice(const std::string& devnode) {
     auto it = device_threads.find(devnode);
     if (it != device_threads.end()) {
         close(it->second.fd);
-        if (it->second.thread.joinable())
-            it->second.thread.detach();
+        if (it->second.thread.joinable()) it->second.thread.detach();
         libevdev_free(it->second.dev);
         device_threads.erase(it);
     }
@@ -125,18 +125,17 @@ void monitorDevices() {
         FD_SET(fd, &fds);
 
         struct timeval tv = {0, 500000};
-        if (select(fd+1, &fds, NULL, NULL, &tv) > 0) {
+        if (select(fd + 1, &fds, NULL, NULL, &tv) > 0) {
             struct udev_device* dev = udev_monitor_receive_device(mon);
             if (dev) {
                 std::string action = udev_device_get_action(dev);
-                std::string devnode = udev_device_get_devnode(dev) ? udev_device_get_devnode(dev) : "";
+                std::string devnode =
+                    udev_device_get_devnode(dev) ? udev_device_get_devnode(dev) : "";
 
                 if (action == "add") {
-                    if (udev_device_get_property_value(dev, "ID_INPUT_KEYBOARD"))
-                        addDevice(dev);
+                    if (udev_device_get_property_value(dev, "ID_INPUT_KEYBOARD")) addDevice(dev);
                 } else if (action == "remove") {
-                    if (!devnode.empty())
-                        removeDevice(devnode);
+                    if (!devnode.empty()) removeDevice(devnode);
                 }
 
                 udev_device_unref(dev);

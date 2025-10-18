@@ -1,23 +1,20 @@
 #include "input_handler.hpp"
 
-std::array<bool, 256> key_states;
-std::mutex key_mutex;
-std::mutex device_mutex;
-std::map<std::string, DeviceContext> device_threads;
-void readDeviceEvents(libevdev* dev, const std::string& name, const std::atomic<bool>& running) {
+void InputHandler::readDeviceEvents(libevdev* dev, const std::string& name,
+                                    const std::atomic<bool>& running) {
     struct input_event ev;
     while (running) {
         int rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_BLOCKING, &ev);  // non-blocking? sync?
         if (rc == 0 && ev.type == EV_KEY) {
             std::lock_guard<std::mutex> lock(key_mutex);
-            key_states[ev.code] = ev.value;
+            key_states[ev.code] = (KeyState)ev.value;
         } else if (rc < 0 && rc != -EAGAIN) {
             break;
         }
     }
 }
 
-void addDevice(struct udev_device* dev, const std::atomic<bool>& running) {
+void InputHandler::addDevice(struct udev_device* dev, const std::atomic<bool>& running) {
     const char* devnode = udev_device_get_devnode(dev);
     if (!devnode) return;
 
@@ -50,7 +47,7 @@ void addDevice(struct udev_device* dev, const std::atomic<bool>& running) {
     device_threads[devnode_str] = std::move(ctx);
 }
 
-void removeDevice(const std::string& devnode) {
+void InputHandler::removeDevice(const std::string& devnode) {
     std::lock_guard<std::mutex> lock(device_mutex);
     auto it = device_threads.find(devnode);
     if (it != device_threads.end()) {
@@ -61,7 +58,7 @@ void removeDevice(const std::string& devnode) {
     }
 }
 
-void monitorDevices(const std::atomic<bool>& running) {
+void InputHandler::monitorDevices(const std::atomic<bool>& running) {
     struct udev* udev = udev_new();
     struct udev_monitor* mon = udev_monitor_new_from_netlink(udev, "udev");
     udev_monitor_filter_add_match_subsystem_devtype(mon, "input", NULL);
@@ -110,4 +107,8 @@ void monitorDevices(const std::atomic<bool>& running) {
 
     udev_monitor_unref(mon);
     udev_unref(udev);
+}
+
+InputHandler::InputHandler() {
+    key_states.fill(KeyState::NotPressed);
 }
