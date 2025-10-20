@@ -104,7 +104,6 @@ void InputHandler::monitorDevices(const std::atomic<bool>& running) {
             }
         }
     }
-    std::cout << "exiting monitor loop" << std::endl;
     udev_monitor_unref(mon);
     udev_unref(udev);
 }
@@ -114,7 +113,6 @@ InputHandler::InputHandler() {
 }
 
 InputHandler::~InputHandler() {
-    std::cout << "input destructor" << std::endl;
     std::lock_guard<std::mutex> lock(device_mutex);
     for (auto& [_, ctx] : device_threads) {
         if (ctx.thread.joinable()) ctx.thread.join();
