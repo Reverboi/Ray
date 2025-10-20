@@ -18,9 +18,13 @@ constexpr std::chrono::milliseconds MS_PER_UPDATE(
     UPS);  // if you keep them contexpr and bring them inside Scene you'll need static as well
 
 class Context {
-   public:
+    std::thread UpdateThread;
+    std::thread RasterizeThread;
+    std::thread MonitorThread;
+    std::atomic<bool>& Running;
+
     MilkMan<Scene> SceneInstance;
-    double PixelRatio = 2.06;  // 2.06
+    double PixelRatio;  // 2.06
 
     InputHandler InputHandlerInstance;
 
@@ -28,16 +32,17 @@ class Context {
 
     std::size_t rows, cols;
 
-    bool debug = true;
+    bool debug;
     void GetDimensions();
 
-    void Render();
     void Update();
     void Rasterize();
-    Context();
-    ~Context();
-};
 
-void UpdateLoop(Context& ref, std::atomic<bool>& running);
-void RenderLoop(Context& ref, std::atomic<bool>& running);
-void RasterizeLoop(Context& ref, std::atomic<bool>& running);
+    void UpdateLoop();
+    void RasterizeLoop();
+
+   public:
+    Context(std::atomic<bool>& running);
+    ~Context();
+    void Render();
+};

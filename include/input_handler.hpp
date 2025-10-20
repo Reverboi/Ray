@@ -5,11 +5,11 @@
 
 #include <atomic>
 #include <csignal>
+#include <iostream>
 #include <map>
 #include <mutex>
 #include <string>
 #include <thread>
-
 class InputHandler {
     struct DeviceContext {
         int fd;
@@ -32,9 +32,10 @@ class InputHandler {
 
     void removeDevice(const std::string& devnode);
 
+   public:
     void monitorDevices(const std::atomic<bool>& running);
 
-   public:
     InputHandler();
+    ~InputHandler();
     std::array<KeyState, 256> key_states;
 };

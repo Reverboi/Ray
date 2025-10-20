@@ -6,15 +6,23 @@ void Context::GetDimensions() {
 
 Context::~Context() {
     endwin();
+    RasterizeThread.join();
+    UpdateThread.join();
+    MonitorThread.join();
 }
 
-Context::Context() : SceneInstance(), InputHandlerInstance() {
+Context::Context(std::atomic<bool>& running) : Running(running) {
+    MonitorThread = std::thread(&InputHandler::monitorDevices, std::ref(InputHandlerInstance),
+                                std::ref(Running));
+    UpdateThread = std::thread(&Context::UpdateLoop, this);
     initscr();
     start_color();
     GetDimensions();
+    PixelRatio = 2.06;
+    debug = false;
     PixelBuffer = DoubleBuffer<Buffer2D<Pixel>>(rows, cols);
-
-    //  Initialize color pairs
+    RasterizeThread = std::thread(&Context::RasterizeLoop, this);
+    //    Initialize color pairs
     init_pair(1, COLOR_RED, COLOR_BLACK);
     init_pair(2, COLOR_GREEN, COLOR_BLACK);
     init_pair(3, COLOR_YELLOW, COLOR_BLACK);
@@ -25,7 +33,6 @@ Context::Context() : SceneInstance(), InputHandlerInstance() {
     cbreak();  // Disabilita il buffering dell'input
     noecho();
     curs_set(0);
-    // nodelay(stdscr, TRUE); makes getch() impatient
     refresh();
 }
 
@@ -136,7 +143,6 @@ void Context::Update() {
     if (InputStateRef[23]) {
         debug = !debug;
     }
-    // add wait here
     SceneInstance.WorkerSwap();
 }
 
@@ -147,7 +153,6 @@ void Context::Rasterize() {
     GetDimensions();
     if ((rows != buf.rows()) || (cols != buf.cols())) {  // maybe we should take a quick break
         buf = Buffer2D<Pixel>(rows, cols);
-        // PixelBuffer = DoubleBuffer<Buffer2D<Pixel>>(rows, cols);
     }
 
     buf.fill(Pixel());  // unnecessary???
@@ -240,15 +245,15 @@ void Context::Rasterize() {
     SceneInstance.CustomerSwap();
 }
 
-void UpdateLoop(Context& ref, std::atomic<bool>& running) {
+void Context::UpdateLoop() {
     auto frameStart = std::chrono::high_resolution_clock::now();
     auto frameEnd = std::chrono::high_resolution_clock::now();
     auto frameDuration =
         std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart);
-    while (running) {
+    while (Running) {
         frameStart = std::chrono::high_resolution_clock::now();
 
-        ref.Update();
+        Update();
 
         frameEnd = std::chrono::high_resolution_clock::now();
         auto frameDuration =
@@ -256,17 +261,14 @@ void UpdateLoop(Context& ref, std::atomic<bool>& running) {
         if (frameDuration < MS_PER_UPDATE) {
             std::this_thread::sleep_for(MS_PER_UPDATE - frameDuration);
         }
+        // else { debug: losing frames/ticks}
     }
+    SceneInstance.Stop();
 }
 
-void RenderLoop(Context& ref, std::atomic<bool>& running) {
-    while (running) {
-        ref.Render();
+void Context::RasterizeLoop() {
+    while (Running) {
+        Rasterize();
     }
-}
-
-void RasterizeLoop(Context& ref, std::atomic<bool>& running) {
-    while (running) {
-        ref.Rasterize();
-    }
+    PixelBuffer.Stop();
 }

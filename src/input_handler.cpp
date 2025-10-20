@@ -41,7 +41,7 @@ void InputHandler::addDevice(struct udev_device* dev, const std::atomic<bool>& r
     ctx.dev = evdev;
     ctx.devnode = devnode_str;
     ctx.name = name;
-    ctx.thread = std::thread(readDeviceEvents, evdev, name, std::ref(running));
+    ctx.thread = std::thread(&InputHandler::readDeviceEvents, this, evdev, name, std::ref(running));
 
     std::lock_guard<std::mutex> lock(device_mutex);
     device_threads[devnode_str] = std::move(ctx);
@@ -104,11 +104,21 @@ void InputHandler::monitorDevices(const std::atomic<bool>& running) {
             }
         }
     }
-
+    std::cout << "exiting monitor loop" << std::endl;
     udev_monitor_unref(mon);
     udev_unref(udev);
 }
 
 InputHandler::InputHandler() {
     key_states.fill(KeyState::NotPressed);
+}
+
+InputHandler::~InputHandler() {
+    std::cout << "input destructor" << std::endl;
+    std::lock_guard<std::mutex> lock(device_mutex);
+    for (auto& [_, ctx] : device_threads) {
+        if (ctx.thread.joinable()) ctx.thread.join();
+        libevdev_free(ctx.dev);
+        close(ctx.fd);
+    }
 }

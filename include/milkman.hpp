@@ -2,6 +2,7 @@
 #include <condition_variable>
 #include <mutex>
 
+using namespace std::chrono_literals;
 template <typename T>
 class MilkMan {
    public:
@@ -23,7 +24,7 @@ class MilkMan {
     }
 
     template <typename... Args>
-    MilkMan(Args&&... args) : buffers_{T(std::forward<Args>(args)...)} {
+    MilkMan(Args&&... args) : buffers_{T(std::forward<Args>(args)...)}, StopFlag(false) {
         buffers_[1] = buffers_[0];
         buffers_[2] = buffers_[0];
     }
@@ -46,7 +47,9 @@ class MilkMan {
 
     void CustomerSwap() {
         std::unique_lock<std::mutex> lock(mutex_);
-        cv.wait(lock, [this] { return WorkerReadingIndex != CustomerReadingIndex; });
+
+        auto timeout = std::chrono::steady_clock::now() + 4s;
+        cv.wait(lock, [this] { return (WorkerReadingIndex != CustomerReadingIndex) || StopFlag; });
         UsedIndex = CustomerReadingIndex;
         CustomerReadingIndex = FreshIndex;
         lock.unlock();
@@ -56,10 +59,15 @@ class MilkMan {
     inline T& New() { return buffers_[WorkerWritingIndex]; }
     inline const T& Old() const { return buffers_[WorkerReadingIndex]; }
 
+    inline void Stop() {
+        StopFlag = true;
+        cv.notify_one();
+    }
+
    private:
     std::condition_variable cv;
     std::mutex mutex_;
-
+    bool StopFlag;
     T buffers_[3];
     int CustomerReadingIndex = 0;
     int FreshIndex = 0;

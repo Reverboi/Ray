@@ -2,6 +2,7 @@
 #include <condition_variable>
 #include <mutex>
 
+using namespace std::chrono_literals;
 template <typename T>
 class DoubleBuffer {
    public:
@@ -25,14 +26,14 @@ class DoubleBuffer {
     }
 
     template <typename... Args>
-    DoubleBuffer(Args&&... args) : buffers_{T(std::forward<Args>(args)...)} {
+    DoubleBuffer(Args&&... args) : StopFlag(false), buffers_{T(std::forward<Args>(args)...)} {
         buffers_[1] = buffers_[0];
     }
 
     void WorkerSwap() {
         std::unique_lock<std::mutex> lock(mutex_);
         ProposedIndex = 1 - ProposedIndex;
-        cv.wait(lock, [this] { return RequestedIndex == ProposedIndex; });
+        cv.wait(lock, [this] { return (RequestedIndex == ProposedIndex) || StopFlag; });
 
         lock.unlock();
         cv.notify_one();
@@ -41,7 +42,7 @@ class DoubleBuffer {
     void CustomerSwap() {
         std::unique_lock<std::mutex> lock(mutex_);
         RequestedIndex = 1 - RequestedIndex;
-        cv.wait(lock, [this] { return RequestedIndex == ProposedIndex; });
+        cv.wait(lock, [this] { return (RequestedIndex == ProposedIndex) || StopFlag; });
 
         lock.unlock();
         cv.notify_one();
@@ -61,11 +62,16 @@ class DoubleBuffer {
     // DoubleBuffer(DoubleBuffer&&) noexcept = default;
     DoubleBuffer& operator=(const DoubleBuffer&) = default;
     // DoubleBuffer& operator=(DoubleBuffer&&) noexcept = default;
+    inline void Stop() {
+        StopFlag = true;
+        cv.notify_one();
+    }
 
    private:
-    std::condition_variable cv;  // do i need 2 of these? it seems that you don't
+    std::condition_variable cv;
     std::mutex mutex_;
     T buffers_[2];
+    bool StopFlag;
     int RequestedIndex = 0;
     int ProposedIndex = 0;
 };
