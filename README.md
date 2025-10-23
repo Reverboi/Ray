@@ -3,9 +3,14 @@
 A rasterizer for your terminal!
 
 ### Table of Contents
-
+- [About this project](#about)
 - [Compiling](#compiling)
 - [Usage](#usage)
+
+### About this Project
+
+I built Ray without reallly knowing what a rasterizer was, one day i just convinced myself i probably knew enough geometry and programming to make a "game engine" type-thing. Not a fully fledged one of course, just something you could "take a walk" in, and why not make it render directly in the terminal using something like `ncurses`? I quickly realized if I wanted this thing to be half-decent I actually needed to learn a lot more, mainly about multi-threading, concurrency, sphere-projection, matrix manipulation, data sharing, data types, rotations in 3D space and of course get a bit more lost in the good old C++ manual pages and all its weirdness.
+All of this to say i use this project as a playground to learn what I'm intrested in or what i need in order to build what I'm intrested in and generally get a deeper understanding of the C++ languager as a whole.
 
 ### Compiling
 
