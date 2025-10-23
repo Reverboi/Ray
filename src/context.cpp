@@ -27,9 +27,8 @@ Context::Context(std::atomic<bool>& running) : Running(running) {
     init_pair(2, COLOR_GREEN, COLOR_BLACK);
     init_pair(3, COLOR_YELLOW, COLOR_BLACK);
     init_pair(4, COLOR_BLUE, COLOR_BLACK);
-    init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(6, COLOR_CYAN, COLOR_BLACK);
-    init_pair(7, COLOR_WHITE, COLOR_BLACK);
+    init_pair(5, COLOR_CYAN, COLOR_BLACK);
+    init_pair(6, COLOR_WHITE, COLOR_BLACK);
     cbreak();  // Disabilita il buffering dell'input
     noecho();
     curs_set(0);
@@ -167,7 +166,7 @@ void Context::Rasterize() {
                                    (buf(xx, yy).Distance > distance))) {
                 buf(xx, yy).Distance = distance;
                 buf(xx, yy).Char = '+';
-                buf(xx, yy).Colour = 7;
+                buf(xx, yy).Colour = 6;
             }
         }
     }
@@ -233,8 +232,8 @@ void Context::Rasterize() {
                             case 6:
                                 b = 'i';
                         }
-                        buf(i, j).Char = b;
-                        buf(i, j).Colour = f + 1;
+                        buf(i, j).Char = '%';
+                        buf(i, j).Colour = (f % 6) + 1;
                         buf(i, j).Distance = t;
                     }
                 }
