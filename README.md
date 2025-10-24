@@ -1,7 +1,8 @@
 # Ray
 
-A rasterizer for your terminal!
+![Screenshot of the program in use](https://reverboi.com/archive/pic1.png)
 
+A rasterizer for your terminal!
 ### Table of Contents
 - [About this project](#about)
 - [Compiling](#compiling)
