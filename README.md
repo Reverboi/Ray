@@ -1,6 +1,6 @@
 # Ray
 
-![Screenshot of the program in use](https://reverboi.com/post/ray/thumbnail.gif)
+![Screenshot of the program in use](./thumbnail.gif)
 
 A rasterizer for your terminal!
 
