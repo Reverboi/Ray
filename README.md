@@ -1,6 +1,6 @@
 # Ray
 
-![Screenshot of the program in use](./thumbnail.gif)
+<video src="https://reverboi.com/post/ray/github.mp4" autoplay loop muted playsinline width="600"></video>
 
 A rasterizer for your terminal!
 
