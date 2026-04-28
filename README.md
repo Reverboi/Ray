@@ -1,9 +1,11 @@
 # Ray
 
-![Screenshot of the program in use](https://reverboi.com/archive/pic1.png)
+![Screenshot of the program in use](https://reverboi.com/post/ray/Video%20del%2023-04-2026%2016_20_18.gif)
 
 A rasterizer for your terminal!
+
 ### Table of Contents
+
 - [About this project](#about)
 - [Compiling](#compiling)
 - [Usage](#usage)
@@ -23,13 +25,16 @@ First, clone the repository:
 git clone https://github.com/reverboi/ray.git
 cd ray
 ```
+
 Now get the necessary dependencies:
+
 ```bash
 sudo apt update
 sudo apt install libevdev-dev libudev-dev libncurses-dev
 ```
+
 Now we're ready to actually compile the project!
-Using your preferred terminal-shell-emulator-command-line-interface-whatever-you-wanna-call-it, navigate to the directory where the compilation will take place, i usually make a dirctory named "build" (how original!) inside the root directory of the project (alongside tis README.md). Navigate to that directory, type ```cmake ..``` and them ```make```
+Using your preferred terminal-shell-emulator-command-line-interface-whatever-you-wanna-call-it, navigate to the directory where the compilation will take place, i usually make a dirctory named "build" (how original!) inside the root directory of the project (alongside tis README.md). Navigate to that directory, type `cmake ..` and them `make`
 Summarizing, starting from the root directory of the project, do this:
 
 ```bash
@@ -38,13 +43,16 @@ cd build
 cmake ..
 make
 ```
+
 ### Usage
-You will find that the compilation process has spawned a file named ```Ray``` in your build directory.
+
+You will find that the compilation process has spawned a file named `Ray` in your build directory.
 Always from the terminal run it by typing:
 
 ```bash
 sudo ./Ray
 ```
+
 The sudo privilege is necessary for reading raw keyboard input.
 
 You should now find yourself in what resembles a 3D room with a big ball made of triangles in front of you.
